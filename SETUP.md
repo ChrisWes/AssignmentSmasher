@@ -24,7 +24,17 @@ needs to put and get objects by key, no public access.
 Workers & Pages → **Create** → **Pages** → **Connect to Git** (use the legacy Pages import — this is
 the same route the HubSpot tracker used, not the newer unified Workers creation flow, because that one
 doesn't wire up Pages Functions the way this app expects). Pick this repository and the `main` branch.
-Leave the build command empty and the build output directory as `/` (or blank). Deploy.
+
+**Set the build command to `npm ci`.** Unlike the HubSpot tracker, this site has real npm
+dependencies (`@anthropic-ai/sdk`, `zod`) that the Functions need at build time. With no build
+command, Cloudflare skips straight to bundling the Functions without ever installing them, and the
+build fails with `Could not resolve "@anthropic-ai/sdk"` (and the same for every other import) because
+`node_modules` never existed. `npm ci` installs exactly what `package-lock.json` pins, which is what a
+build step should do. Leave the build output directory as `/` (or blank) — this setting is unrelated to
+the Functions bundling step; it's just where the static `index.html` is served from. Deploy.
+
+If the build command needs changing after the project already exists: Settings → Builds & deployments →
+Build configuration → Build command.
 
 ## 5. Bind the database, the bucket and the API key
 
