@@ -18,7 +18,7 @@ function badRequest(message) {
 }
 
 export async function onRequestGet({ request, env }) {
-  const owner = ownerEmail(request, env);
+  const owner = await ownerEmail(request, env);
   if (!owner) return unauthorized();
   if (!env.DB) return json({ error: 'Database not bound' }, 500);
 
@@ -31,7 +31,7 @@ export async function onRequestGet({ request, env }) {
 }
 
 export async function onRequestPost({ request, env }) {
-  const owner = ownerEmail(request, env);
+  const owner = await ownerEmail(request, env);
   if (!owner) return unauthorized();
   if (!env.DB) return json({ error: 'Database not bound' }, 500);
   if (!env.FILES) return json({ error: 'File storage not bound' }, 500);

@@ -52,7 +52,7 @@ function present(row, files) {
 }
 
 export async function onRequestGet({ request, env, params }) {
-  const owner = ownerEmail(request, env);
+  const owner = await ownerEmail(request, env);
   if (!owner) return unauthorized();
   if (!env.DB) return json({ error: 'Database not bound' }, 500);
 
@@ -64,7 +64,7 @@ export async function onRequestGet({ request, env, params }) {
 }
 
 export async function onRequestPatch({ request, env, params }) {
-  const owner = ownerEmail(request, env);
+  const owner = await ownerEmail(request, env);
   if (!owner) return unauthorized();
   if (!env.DB) return json({ error: 'Database not bound' }, 500);
 
