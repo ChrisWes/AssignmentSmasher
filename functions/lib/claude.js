@@ -1,6 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+
+// Cloudflare Pages' Functions bundler cannot resolve @anthropic-ai/sdk's deep subpath exports
+// (helpers/zod, lib/transform-json-schema — both failed to resolve at build time, even though
+// they work fine under `wrangler pages dev` locally). Only the package's root import is reliable
+// there, so this builds the same { type: 'json_schema', schema, parse } shape that
+// zodOutputFormat() would, using only that root import plus zod's own toJSONSchema. The transform
+// below mirrors @anthropic-ai/sdk's transformJSONSchema exactly (same strict-schema rules), so the
+// request Claude sees is identical to what the SDK helper would have sent.
 
 export const MODEL = 'claude-opus-5';
 
@@ -37,6 +44,92 @@ Do this:
 5. Give each milestone a short, encouraging one-line goal and your best estimate of the focused days of work it needs. Be realistic about a student juggling several modules and a life outside them — do not assume full days of uninterrupted work.
 
 If a rubric was provided, check before you finish that the milestones between them touch on every criterion in it.`;
+
+const SUPPORTED_STRING_FORMATS = new Set([
+  'date-time', 'time', 'date', 'duration', 'email', 'hostname', 'uri', 'ipv4', 'ipv6', 'uuid'
+]);
+
+function pop(obj, key) {
+  const v = obj[key];
+  delete obj[key];
+  return v;
+}
+
+// Mirrors @anthropic-ai/sdk's internal transformJSONSchema — see the comment at the top of this
+// file for why this is vendored rather than imported.
+function strictJsonSchema(jsonSchema) {
+  const strict = {};
+  const defs = pop(jsonSchema, '$defs');
+  if (defs !== undefined) {
+    const strictDefs = {};
+    strict.$defs = strictDefs;
+    for (const [name, defSchema] of Object.entries(defs)) strictDefs[name] = strictJsonSchema(defSchema);
+  }
+  const ref = pop(jsonSchema, '$ref');
+  if (ref !== undefined) { strict.$ref = ref; return strict; }
+
+  const type = pop(jsonSchema, 'type');
+  const anyOf = pop(jsonSchema, 'anyOf');
+  const oneOf = pop(jsonSchema, 'oneOf');
+  const allOf = pop(jsonSchema, 'allOf');
+  if (Array.isArray(anyOf)) strict.anyOf = anyOf.map(strictJsonSchema);
+  else if (Array.isArray(oneOf)) strict.anyOf = oneOf.map(strictJsonSchema);
+  else if (Array.isArray(allOf)) strict.allOf = allOf.map(strictJsonSchema);
+  else {
+    if (type === undefined) throw new Error('JSON schema must have a type defined if anyOf/oneOf/allOf are not used');
+    strict.type = type;
+  }
+
+  const description = pop(jsonSchema, 'description');
+  if (description !== undefined) strict.description = description;
+  const title = pop(jsonSchema, 'title');
+  if (title !== undefined) strict.title = title;
+
+  if (type === 'object') {
+    const properties = pop(jsonSchema, 'properties') || {};
+    strict.properties = Object.fromEntries(Object.entries(properties).map(([k, v]) => [k, strictJsonSchema(v)]));
+    pop(jsonSchema, 'additionalProperties');
+    strict.additionalProperties = false;
+    const required = pop(jsonSchema, 'required');
+    if (required !== undefined) strict.required = required;
+  } else if (type === 'string') {
+    const format = pop(jsonSchema, 'format');
+    if (format !== undefined && SUPPORTED_STRING_FORMATS.has(format)) strict.format = format;
+    else if (format !== undefined) jsonSchema.format = format;
+  } else if (type === 'array') {
+    const items = pop(jsonSchema, 'items');
+    if (items !== undefined) strict.items = strictJsonSchema(items);
+    const minItems = pop(jsonSchema, 'minItems');
+    if (minItems === 0 || minItems === 1) strict.minItems = minItems;
+    else if (minItems !== undefined) jsonSchema.minItems = minItems;
+  }
+
+  if (Object.keys(jsonSchema).length > 0) {
+    strict.description = (strict.description ? strict.description + '\n\n' : '') +
+      '{' + Object.entries(jsonSchema).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ') + '}';
+  }
+  return strict;
+}
+
+// Equivalent to zodOutputFormat(zodObject) from @anthropic-ai/sdk/helpers/zod.
+function jsonSchemaOutputFormat(zodObject) {
+  const schema = strictJsonSchema(JSON.parse(JSON.stringify(z.toJSONSchema(zodObject, { reused: 'ref' }))));
+  return {
+    type: 'json_schema',
+    schema,
+    parse(content) {
+      let parsed;
+      try { parsed = JSON.parse(content); }
+      catch (e) { throw new Error('Failed to parse structured output as JSON: ' + e.message); }
+      const result = zodObject.safeParse(parsed);
+      if (!result.success) {
+        const issues = result.error.issues.slice(0, 5).map((i) => '  - ' + i.path.join('.') + ': ' + i.message).join('\n');
+        throw new Error('Failed to parse structured output:\n' + issues);
+      }
+      return result.data;
+    }
+  };
+}
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -82,7 +175,7 @@ export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief,
       max_tokens: 16000,
       system: SYSTEM_PROMPT,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high', format: zodOutputFormat(OutlineSchema) },
+      output_config: { effort: 'high', format: jsonSchemaOutputFormat(OutlineSchema) },
       messages: [{ role: 'user', content }]
     });
     message = await stream.finalMessage();
