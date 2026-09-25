@@ -1,0 +1,14 @@
+{
+  "name": "assignment-smasher",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Uploads a college assignment brief and turns it into a milestone plan with how-to steps.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.140.0"
+  }
+}

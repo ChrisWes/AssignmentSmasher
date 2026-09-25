@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Assignment Smasher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f4f2fb; --surface:#ffffff; --surface2:#ebe7f8; --text:#1c1533; --muted:#5d5680;
+  --line:#d8d1ee; --accent:#2f8f5b; --accent-ink:#eafff3; --warn:#b8380c; --warn-bg:#fff1ec;
+  --link:#4a2fc2; color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#16112a; --surface:#1f1839; --surface2:#2a2150; --text:#f1edfc; --muted:#a9a1cc;
+    --line:#372e62; --accent:#4bd18a; --accent-ink:#08160f; --warn:#ff8a6a; --warn-bg:#3a1c14;
+    --link:#b7a6ff; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 400 16px/1.55 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 64px; }
+a { color: var(--link); }
+h1, h2, h3 { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-weight: 700; margin: 0; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+header.top h1 { font-size: clamp(30px, 6vw, 40px); }
+.btn {
+  font: 600 15px/1 'Barlow', sans-serif; border-radius: 10px; padding: 12px 18px; min-height: 44px;
+  cursor: pointer; border: 2px solid var(--line); background: var(--surface); color: var(--text);
+}
+.btn-accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-quiet { background: none; border-color: transparent; padding: 10px 4px; }
+.btn:disabled { opacity: .55; cursor: default; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+.project-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+  margin-bottom: 10px; cursor: pointer; text-align: left; font: inherit; color: inherit;
+}
+.project-row:hover { border-color: var(--accent); }
+.project-row .meta { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.badge { font: 600 12px/1 'Barlow', sans-serif; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+.badge-draft, .badge-analyzing { background: var(--surface2); color: var(--muted); }
+.badge-outline { background: var(--accent-ink); color: var(--accent); }
+.badge-failed { background: var(--warn-bg); color: var(--warn); }
+.empty { color: var(--muted); text-align: center; padding: 40px 0; }
+
+label { display: block; font-weight: 600; margin: 16px 0 6px; }
+label:first-child { margin-top: 0; }
+.hint { display: block; font-weight: 400; font-size: 14px; color: var(--muted); margin-top: 2px; }
+input[type="text"], input[type="date"], input[type="number"], textarea {
+  width: 100%; padding: 11px 12px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; font: 400 16px/1.4 'Barlow', sans-serif; min-height: 44px;
+}
+textarea { min-height: 60px; resize: vertical; }
+input[type="file"] { width: 100%; padding: 8px 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+@media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+.form-actions { display: flex; gap: 12px; margin-top: 20px; align-items: center; flex-wrap: wrap; }
+.error-banner { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin: 14px 0; font-weight: 500; }
+.progress { display: flex; align-items: center; gap: 12px; color: var(--muted); padding: 20px 0; }
+.spinner { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.section-title { font-size: 22px; margin: 26px 0 10px; }
+.section-title:first-of-type { margin-top: 4px; }
+ul.plain { list-style: none; margin: 0; padding: 0; }
+ul.plain li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+ul.plain li:last-child { border-bottom: none; }
+.deliverable .fmt { color: var(--muted); font-size: 14px; }
+.criterion { display: flex; justify-content: space-between; gap: 12px; }
+.criterion .weight { color: var(--muted); white-space: nowrap; }
+.ambiguity-list { background: var(--surface2); border-radius: 10px; padding: 14px 16px; }
+.ambiguity-list li { border-bottom: 1px solid var(--line); }
+.ambiguity-list li:last-child { border-bottom: none; }
+.none-note { color: var(--muted); font-style: italic; }
+
+.schedule-summary { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin: 10px 0 4px; }
+.overcommit-warning { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin: 10px 0 16px; font-weight: 600; }
+
+.milestone { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.milestone .row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.milestone .num { font: 700 15px/1 'Barlow Condensed', sans-serif; color: var(--muted); }
+.milestone .target { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.milestone label { margin: 10px 0 4px; font-size: 14px; }
+.milestone .dur-row { display: flex; align-items: center; gap: 10px; }
+.milestone .dur-row input { width: 90px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 20;
+  background: var(--accent); color: var(--accent-ink); padding: 12px 20px; border-radius: 999px;
+  font: 600 15px/1.2 'Barlow', sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.28); max-width: calc(100vw - 32px); text-align: center;
+  transition: opacity .25s ease, transform .25s ease;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.error { background: var(--warn); color: #fff; }
+</style>
+</head>
+<body>
+<main class="wrap" id="app"></main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var app = document.getElementById('app');
+  var state = { view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  var toastTimer = null;
+  function toast(msg, isError) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.toggle('error', !!isError);
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3500);
+  }
+
+  function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+  async function api(path, options) {
+    var res = await fetch(path, options);
+    var data = null;
+    try { data = await res.json(); } catch (e) { /* no body */ }
+    if (!res.ok) {
+      var msg = (data && data.error) ? data.error : ('Request failed (' + res.status + ')');
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  // Mirrors functions/lib/dates.js — client-side only for live feedback while editing;
+  // the server recomputes authoritatively on save.
+  function computeScheduleLocal(startDate, endDate, milestones) {
+    var BUFFER = 3;
+    var start = new Date(startDate + 'T00:00:00Z');
+    var end = new Date(endDate + 'T00:00:00Z');
+    var totalDays = Math.round((end - start) / 86400000);
+    var usableDays = Math.max(totalDays - BUFFER, 0);
+    var cursor = 0;
+    var scheduled = milestones.map(function (m) {
+      cursor += Number(m.duration_days) || 0;
+      var d = new Date(start.getTime() + cursor * 86400000);
+      return Object.assign({}, m, { target_date: d.toISOString().slice(0, 10) });
+    });
+    var needed = milestones.reduce(function (s, m) { return s + (Number(m.duration_days) || 0); }, 0);
+    return { milestones: scheduled, total_days: totalDays, needed_days: needed, usable_days: usableDays, buffer_days: BUFFER, overcommitted: needed > usableDays };
+  }
+
+  function render() {
+    if (state.view === 'dashboard') return renderDashboard();
+    if (state.view === 'new') return renderNewProject();
+    if (state.view === 'detail') return renderDetail();
+  }
+
+  // ---- Dashboard ----
+
+  function renderDashboard() {
+    var rows = state.projects.map(function (p) {
+      return '<button type="button" class="project-row" data-open="' + esc(p.id) + '">' +
+        '<span><strong>' + esc(p.title) + '</strong>' +
+        '<span class="meta">' + esc(p.subject || 'No subject given') + ' · due ' + esc(p.end_date) + '</span></span>' +
+        '<span class="badge badge-' + esc(p.status) + '">' + esc(statusLabel(p.status)) + '</span>' +
+      '</button>';
+    }).join('');
+
+    app.innerHTML =
+      '<header class="top"><h1>Assignment Smasher</h1>' +
+      '<button type="button" class="btn btn-accent" id="newBtn">+ New project</button></header>' +
+      (state.projects.length ? rows : '<p class="empty">No projects yet. Upload a brief to get started.</p>');
+
+    document.getElementById('newBtn').addEventListener('click', function () {
+      state.view = 'new'; state.formError = null; render();
+    });
+    app.querySelectorAll('[data-open]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openProject(btn.getAttribute('data-open')); });
+    });
+  }
+
+  function statusLabel(s) {
+    return s === 'draft' ? 'Not analysed' : s === 'analyzing' ? 'Reading brief…' : s === 'outline' ? 'Plan ready' : s === 'failed' ? 'Analysis failed' : s;
+  }
+
+  async function loadDashboard() {
+    state.view = 'dashboard';
+    try {
+      var data = await api('/api/projects');
+      state.projects = data.projects || [];
+    } catch (e) {
+      state.projects = [];
+      toast(e.message, true);
+    }
+    render();
+  }
+
+  // ---- New project ----
+
+  function renderNewProject() {
+    app.innerHTML =
+      '<header class="top"><h1>New project</h1>' +
+      '<button type="button" class="btn btn-quiet" id="backBtn">← Back</button></header>' +
+      '<form class="card" id="newForm" novalidate>' +
+        (state.formError ? '<p class="error-banner">' + esc(state.formError) + '</p>' : '') +
+        '<label for="f-title">Title<span class="hint">Whatever you’ll recognise it by — the module name is fine.</span></label>' +
+        '<input type="text" id="f-title" name="title" maxlength="200" required>' +
+        '<label for="f-subject">Subject<span class="hint">Optional, but it helps Claude read the brief in context.</span></label>' +
+        '<input type="text" id="f-subject" name="subject" maxlength="200">' +
+        '<div class="grid2">' +
+          '<div><label for="f-start">Start date</label><input type="date" id="f-start" name="start_date" required></div>' +
+          '<div><label for="f-end">Deadline</label><input type="date" id="f-end" name="end_date" required></div>' +
+        '</div>' +
+        '<label for="f-brief">Assignment brief (PDF)<span class="hint">Up to 8MB.</span></label>' +
+        '<input type="file" id="f-brief" name="brief" accept="application/pdf" required>' +
+        '<label for="f-rubric">Marking rubric (PDF, optional)<span class="hint">If it’s a separate document from the brief.</span></label>' +
+        '<input type="file" id="f-rubric" name="rubric" accept="application/pdf">' +
+        '<div class="form-actions">' +
+          '<button type="submit" class="btn btn-accent" id="submitBtn">Create and read the brief</button>' +
+        '</div>' +
+      '</form>';
+
+    document.getElementById('f-start').value = todayISO();
+    document.getElementById('backBtn').addEventListener('click', loadDashboard);
+    document.getElementById('newForm').addEventListener('submit', handleCreate);
+  }
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    var form = e.target;
+    var submitBtn = document.getElementById('submitBtn');
+    state.formError = null;
+
+    var brief = form.brief.files[0];
+    if (brief && brief.type !== 'application/pdf') {
+      state.formError = 'The brief must be a PDF.'; render(); return;
+    }
+    var startDate = form.start_date.value, endDate = form.end_date.value;
+    if (startDate && endDate && endDate <= startDate) {
+      state.formError = 'The deadline needs to be after the start date.'; render(); return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Uploading…';
+
+    try {
+      var fd = new FormData(form);
+      var created = await api('/api/projects', { method: 'POST', body: fd });
+      state.view = 'detail';
+      state.detail = { id: created.id, title: created.title, subject: created.subject, start_date: created.start_date, end_date: created.end_date, status: 'analyzing', files: [], outline: null };
+      render();
+      await runAnalyze(created.id);
+    } catch (err) {
+      state.formError = err.message;
+      render();
+    }
+  }
+
+  // ---- Project detail ----
+
+  async function openProject(id) {
+    state.view = 'detail';
+    state.detail = null;
+    render();
+    await loadDetail(id);
+  }
+
+  async function loadDetail(id) {
+    try {
+      state.detail = await api('/api/projects/' + encodeURIComponent(id));
+    } catch (e) {
+      toast(e.message, true);
+      loadDashboard();
+      return;
+    }
+    render();
+  }
+
+  async function runAnalyze(id) {
+    try {
+      await api('/api/projects/' + encodeURIComponent(id) + '/analyze', { method: 'POST' });
+    } catch (e) {
+      // The error is already saved against the project; fall through to reload its real state.
+    }
+    await loadDetail(id);
+  }
+
+  function renderDetail() {
+    var d = state.detail;
+    var back = '<button type="button" class="btn btn-quiet" id="backBtn">← All projects</button>';
+
+    if (!d) { app.innerHTML = back + '<div class="progress"><span class="spinner"></span> Loading…</div>'; wireBack(); return; }
+
+    var head = '<header class="top"><h1>' + esc(d.title) + '</h1>' + back + '</header>' +
+      '<p class="meta" style="color:var(--muted); margin:-14px 0 18px;">' + esc(d.subject || 'No subject given') +
+      ' · ' + esc(d.start_date) + ' to ' + esc(d.end_date) + '</p>';
+
+    if (d.status === 'draft') {
+      app.innerHTML = head + '<div class="card"><p>This brief hasn’t been read yet.</p>' +
+        '<button type="button" class="btn btn-accent" id="analyzeBtn">Read the brief</button></div>';
+      wireBack();
+      document.getElementById('analyzeBtn').addEventListener('click', function () { startAnalyzing(d.id); });
+      return;
+    }
+
+    if (d.status === 'analyzing') {
+      app.innerHTML = head + '<div class="progress"><span class="spinner"></span> Reading the brief and planning it out — this can take a minute.</div>';
+      wireBack();
+      return;
+    }
+
+    if (d.status === 'failed') {
+      app.innerHTML = head + '<div class="error-banner">' + esc(d.error || 'Something went wrong.') + '</div>' +
+        '<button type="button" class="btn btn-accent" id="retryBtn">Try again</button>';
+      wireBack();
+      document.getElementById('retryBtn').addEventListener('click', function () { startAnalyzing(d.id); });
+      return;
+    }
+
+    // outline
+    var o = d.outline;
+    var deliverables = o.deliverables.map(function (x) {
+      return '<li class="deliverable"><strong>' + esc(x.title) + '</strong><br><span class="fmt">' + esc(x.format) + '</span><br>' + esc(x.description) + '</li>';
+    }).join('');
+
+    var criteria = o.assessment_criteria.length ? o.assessment_criteria.map(function (c) {
+      return '<li class="criterion"><span>' + esc(c.criterion) + '</span>' + (c.weight ? '<span class="weight">' + esc(c.weight) + '</span>' : '') + '</li>';
+    }).join('') : '<li class="none-note">No separate criteria found — go by the brief itself.</li>';
+
+    var ambiguities = o.ambiguities.length ? o.ambiguities.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('')
+      : '<li class="none-note">Nothing flagged as unclear.</li>';
+
+    var milestones = o.milestones.map(function (m, i) {
+      return '<div class="milestone" data-idx="' + i + '">' +
+        '<div class="row1"><span class="num">Milestone ' + (i + 1) + '</span><span class="target">due around ' + esc(m.target_date) + '</span></div>' +
+        '<label>Title</label><input type="text" class="m-title" value="' + esc(m.title) + '">' +
+        '<label>Goal</label><textarea class="m-goal">' + esc(m.goal) + '</textarea>' +
+        '<label>Focused days needed</label>' +
+        '<div class="dur-row"><input type="number" class="m-duration" min="1" max="120" value="' + esc(m.duration_days) + '"></div>' +
+      '</div>';
+    }).join('');
+
+    app.innerHTML = head +
+      '<div class="schedule-summary" id="scheduleSummary"></div>' +
+      '<div id="overcommitWarning"></div>' +
+      '<h2 class="section-title">Deliverables</h2><ul class="plain">' + deliverables + '</ul>' +
+      '<h2 class="section-title">Assessment criteria</h2><ul class="plain">' + criteria + '</ul>' +
+      '<h2 class="section-title">Worth checking with your tutor</h2><ul class="plain ambiguity-list">' + ambiguities + '</ul>' +
+      '<h2 class="section-title">Milestones</h2>' + milestones +
+      '<div class="form-actions"><button type="button" class="btn btn-accent" id="saveBtn">Save changes</button>' +
+      '<button type="button" class="btn" id="reanalyzeBtn">Re-read the brief</button></div>' +
+      '<p class="hint" style="margin-top:18px;">Steps for each milestone aren’t built yet — for now this is the plan to work from.</p>';
+
+    wireBack();
+    updateScheduleSummary();
+    app.querySelectorAll('.m-duration').forEach(function (inp) {
+      inp.addEventListener('input', updateScheduleSummary);
+    });
+    document.getElementById('saveBtn').addEventListener('click', function () { saveOutlineEdits(d.id); });
+    document.getElementById('reanalyzeBtn').addEventListener('click', function () { startAnalyzing(d.id); });
+  }
+
+  function readMilestonesFromForm() {
+    return Array.prototype.map.call(document.querySelectorAll('.milestone'), function (el) {
+      return {
+        title: el.querySelector('.m-title').value,
+        goal: el.querySelector('.m-goal').value,
+        duration_days: Number(el.querySelector('.m-duration').value)
+      };
+    });
+  }
+
+  function updateScheduleSummary() {
+    var d = state.detail;
+    var milestones = readMilestonesFromForm();
+    var sched = computeScheduleLocal(d.start_date, d.end_date, milestones);
+    document.getElementById('scheduleSummary').innerHTML =
+      '<span>' + sched.total_days + ' days until the deadline</span>' +
+      '<span>' + sched.needed_days + ' days of work planned</span>' +
+      '<span>' + sched.usable_days + ' usable once ' + sched.buffer_days + ' days are kept spare</span>';
+    document.getElementById('overcommitWarning').innerHTML = sched.overcommitted
+      ? '<p class="overcommit-warning">This plan needs about ' + sched.needed_days + ' days of work but there are only about ' +
+        sched.usable_days + ' usable before the deadline (' + sched.buffer_days + ' days kept spare at the end). Trim a milestone or two below.</p>'
+      : '';
+    app.querySelectorAll('.milestone').forEach(function (el, i) {
+      el.querySelector('.target').textContent = 'due around ' + sched.milestones[i].target_date;
+    });
+  }
+
+  async function saveOutlineEdits(id) {
+    var btn = document.getElementById('saveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      var milestones = readMilestonesFromForm();
+      for (var i = 0; i < milestones.length; i++) {
+        if (!milestones[i].title.trim()) throw new Error('Every milestone needs a title.');
+        if (!Number.isFinite(milestones[i].duration_days) || milestones[i].duration_days < 1) throw new Error('Milestone durations must be at least 1 day.');
+      }
+      state.detail = await api('/api/projects/' + encodeURIComponent(id), {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ outline: { milestones: milestones } })
+      });
+      toast('Saved.');
+      render();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false; btn.textContent = 'Save changes';
+    }
+  }
+
+  async function startAnalyzing(id) {
+    state.detail = Object.assign({}, state.detail, { status: 'analyzing' });
+    render();
+    await runAnalyze(id);
+  }
+
+  function wireBack() {
+    var b = document.getElementById('backBtn');
+    if (b) b.addEventListener('click', loadDashboard);
+  }
+
+  loadDashboard();
+})();
+</script>
+</body>
+</html>
