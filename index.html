@@ -114,7 +114,7 @@ ul.plain li:last-child { border-bottom: none; }
   'use strict';
 
   var app = document.getElementById('app');
-  var state = { view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false };
+  var state = { view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false, email: null };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -181,6 +181,7 @@ ul.plain li:last-child { border-bottom: none; }
     app.innerHTML =
       '<header class="top"><h1>Assignment Smasher</h1>' +
       '<button type="button" class="btn btn-accent" id="newBtn">+ New project</button></header>' +
+      (state.email ? '<p class="meta" style="margin:-14px 0 18px;">Signed in as ' + esc(state.email) + '</p>' : '') +
       (state.projects.length ? rows : '<p class="empty">No projects yet. Upload a brief to get started.</p>');
 
     document.getElementById('newBtn').addEventListener('click', function () {
@@ -205,6 +206,13 @@ ul.plain li:last-child { border-bottom: none; }
       toast(e.message, true);
     }
     render();
+  }
+
+  function loadEmail() {
+    api('/api/me').then(function (data) {
+      state.email = data && data.email ? data.email : null;
+      if (state.view === 'dashboard') render();
+    }).catch(function () { /* not shown if it fails — the rest of the app still works */ });
   }
 
   // ---- New project ----
@@ -432,6 +440,7 @@ ul.plain li:last-child { border-bottom: none; }
   }
 
   loadDashboard();
+  loadEmail();
 })();
 </script>
 </body>
