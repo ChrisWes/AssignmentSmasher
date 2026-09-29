@@ -38,7 +38,10 @@ header.top h1 { font-size: clamp(30px, 6vw, 40px); }
 }
 .btn-accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn-quiet { background: none; border-color: transparent; padding: 10px 4px; }
+.btn-warn { background: var(--warn); border-color: var(--warn); color: #fff; }
+.btn-warn-outline { background: none; border-color: var(--warn); color: var(--warn); }
 .btn:disabled { opacity: .55; cursor: default; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
 .project-row {
@@ -53,6 +56,15 @@ header.top h1 { font-size: clamp(30px, 6vw, 40px); }
 .badge-outline { background: var(--accent-ink); color: var(--accent); }
 .badge-failed { background: var(--warn-bg); color: var(--warn); }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+
+.admin-row { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+.admin-row-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.admin-row-main { min-width: 0; }
+.admin-row .meta { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.admin-confirm { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.admin-confirm label { margin: 0 0 8px; font-weight: 400; color: var(--muted); font-size: 14px; }
+.admin-confirm-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.admin-confirm-row input { flex: 1 1 160px; min-width: 0; }
 
 label { display: block; font-weight: 600; margin: 16px 0 6px; }
 label:first-child { margin-top: 0; }
@@ -114,7 +126,10 @@ ul.plain li:last-child { border-bottom: none; }
   'use strict';
 
   var app = document.getElementById('app');
-  var state = { view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false, email: null };
+  var state = {
+    view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false,
+    email: null, isAdmin: false, adminProjects: [], adminConfirmId: null
+  };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -165,6 +180,7 @@ ul.plain li:last-child { border-bottom: none; }
     if (state.view === 'dashboard') return renderDashboard();
     if (state.view === 'new') return renderNewProject();
     if (state.view === 'detail') return renderDetail();
+    if (state.view === 'admin') return renderAdmin();
   }
 
   // ---- Dashboard ----
@@ -180,13 +196,18 @@ ul.plain li:last-child { border-bottom: none; }
 
     app.innerHTML =
       '<header class="top"><h1>Assignment Smasher</h1>' +
-      '<button type="button" class="btn btn-accent" id="newBtn">+ New project</button></header>' +
+      '<span class="header-actions">' +
+        (state.isAdmin ? '<button type="button" class="btn btn-quiet" id="adminBtn">Admin</button>' : '') +
+        '<button type="button" class="btn btn-accent" id="newBtn">+ New project</button>' +
+      '</span></header>' +
       (state.email ? '<p class="meta" style="margin:-14px 0 18px;">Signed in as ' + esc(state.email) + '</p>' : '') +
       (state.projects.length ? rows : '<p class="empty">No projects yet. Upload a brief to get started.</p>');
 
     document.getElementById('newBtn').addEventListener('click', function () {
       state.view = 'new'; state.formError = null; render();
     });
+    var adminBtn = document.getElementById('adminBtn');
+    if (adminBtn) adminBtn.addEventListener('click', loadAdmin);
     app.querySelectorAll('[data-open]').forEach(function (btn) {
       btn.addEventListener('click', function () { openProject(btn.getAttribute('data-open')); });
     });
@@ -211,8 +232,98 @@ ul.plain li:last-child { border-bottom: none; }
   function loadEmail() {
     api('/api/me').then(function (data) {
       state.email = data && data.email ? data.email : null;
+      state.isAdmin = !!(data && data.isAdmin);
       if (state.view === 'dashboard') render();
     }).catch(function () { /* not shown if it fails — the rest of the app still works */ });
+  }
+
+  // ---- Admin ----
+
+  async function loadAdmin() {
+    state.view = 'admin';
+    state.adminConfirmId = null;
+    try {
+      var data = await api('/api/admin/projects');
+      state.adminProjects = data.projects || [];
+    } catch (e) {
+      state.adminProjects = [];
+      toast(e.message, true);
+    }
+    render();
+  }
+
+  function renderAdmin() {
+    var count = state.adminProjects.length;
+    var rows = state.adminProjects.map(function (p) {
+      var confirming = state.adminConfirmId === p.id;
+      return '<div class="admin-row" data-id="' + esc(p.id) + '">' +
+        '<div class="admin-row-top">' +
+          '<div class="admin-row-main">' +
+            '<strong>' + esc(p.title) + '</strong>' +
+            '<span class="meta">' + esc(p.owner_email) + ' · ' + esc(p.subject || 'No subject given') + ' · due ' + esc(p.end_date) + '</span>' +
+          '</div>' +
+          '<span class="badge badge-' + esc(p.status) + '">' + esc(statusLabel(p.status)) + '</span>' +
+          (confirming ? '' : '<button type="button" class="btn btn-warn-outline delete-btn">Delete</button>') +
+        '</div>' +
+        (confirming
+          ? '<div class="admin-confirm">' +
+              '<label>Type <strong>delete</strong> to remove this project and its uploaded files for good.</label>' +
+              '<div class="admin-confirm-row">' +
+                '<input type="text" class="confirm-input" autocomplete="off" spellcheck="false">' +
+                '<button type="button" class="btn btn-warn confirm-delete-btn" disabled>Delete permanently</button>' +
+                '<button type="button" class="btn btn-quiet cancel-delete-btn">Cancel</button>' +
+              '</div>' +
+            '</div>'
+          : '') +
+      '</div>';
+    }).join('');
+
+    app.innerHTML =
+      '<header class="top"><h1>Admin</h1>' +
+      '<button type="button" class="btn btn-quiet" id="backBtn">← Back to dashboard</button></header>' +
+      '<p class="meta" style="margin:-14px 0 18px;">' + count + ' project' + (count === 1 ? '' : 's') + ' across every account.</p>' +
+      (count ? rows : '<p class="empty">No projects yet.</p>');
+
+    wireBack();
+
+    app.querySelectorAll('.delete-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.adminConfirmId = btn.closest('.admin-row').getAttribute('data-id');
+        renderAdmin();
+        var input = app.querySelector('.confirm-input');
+        if (input) input.focus();
+      });
+    });
+    app.querySelectorAll('.cancel-delete-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { state.adminConfirmId = null; renderAdmin(); });
+    });
+    app.querySelectorAll('.admin-row').forEach(function (rowEl) {
+      var input = rowEl.querySelector('.confirm-input');
+      var confirmBtn = rowEl.querySelector('.confirm-delete-btn');
+      if (!input || !confirmBtn) return;
+      input.addEventListener('input', function () {
+        confirmBtn.disabled = input.value.trim().toLowerCase() !== 'delete';
+      });
+      confirmBtn.addEventListener('click', function () {
+        deleteProjectAsAdmin(rowEl.getAttribute('data-id'), confirmBtn);
+      });
+    });
+  }
+
+  async function deleteProjectAsAdmin(id, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    try {
+      await api('/api/admin/projects/' + encodeURIComponent(id), { method: 'DELETE' });
+      state.adminProjects = state.adminProjects.filter(function (p) { return p.id !== id; });
+      state.adminConfirmId = null;
+      toast('Project deleted.');
+      renderAdmin();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+      btn.textContent = 'Delete permanently';
+    }
   }
 
   // ---- New project ----

@@ -46,6 +46,10 @@ for **both** Production and Preview:
 - **Environment variable (Encrypt it)** — variable name exactly `ANTHROPIC_API_KEY`, value the Claude
   API key. Create a key just for this app in the Anthropic console, and set a monthly spend limit
   there too (a few pounds is generous at a project or two a term).
+- **Environment variable** — variable name exactly `ADMIN_EMAILS`, value a comma-separated list of
+  the email addresses that should see the Admin screen (see all projects across everyone, delete
+  any of them). Just your own email to start; add more the same way, comma-separated. Nobody is an
+  admin if this is left unset.
 
 Then go to Deployments, open the latest one and **Retry deployment** — bindings only take effect on a
 deployment made after they're added.
