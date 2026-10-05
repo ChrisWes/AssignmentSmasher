@@ -125,6 +125,8 @@ ul.plain li:last-child { border-bottom: none; }
 (function () {
   'use strict';
 
+  var MAX_FILE_BYTES = 8 * 1024 * 1024; // mirrors functions/api/projects/index.js — checked here
+                                          // too so an oversized file never starts uploading at all
   var app = document.getElementById('app');
   var state = {
     view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false,
@@ -148,7 +150,16 @@ ul.plain li:last-child { border-bottom: none; }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
 
   async function api(path, options) {
-    var res = await fetch(path, options);
+    var res;
+    try {
+      res = await fetch(path, options);
+    } catch (e) {
+      // fetch() itself rejects (always a TypeError) when the request never got a response at all —
+      // a dropped connection, a timeout, or similar — as opposed to the server answering with an
+      // error, which is handled below. Browsers word this differently ("Load failed" in Safari,
+      // "Failed to fetch" in Chrome); show one clear message instead of either raw browser string.
+      throw new Error('The connection dropped before this finished. Check your network and try again.');
+    }
     var data = null;
     try { data = await res.json(); } catch (e) { /* no body */ }
     if (!res.ok) {
@@ -328,12 +339,15 @@ ul.plain li:last-child { border-bottom: none; }
 
   // ---- New project ----
 
+  // Errors during submission are shown by patching this one existing form in place (see
+  // showFormError below), never by rebuilding it — rebuilding via innerHTML would otherwise wipe
+  // out everything typed, and the chosen file along with it, every time something went wrong.
+  // This function only ever runs once per visit to the "new project" screen.
   function renderNewProject() {
     app.innerHTML =
       '<header class="top"><h1>New project</h1>' +
       '<button type="button" class="btn btn-quiet" id="backBtn">← Back</button></header>' +
       '<form class="card" id="newForm" novalidate>' +
-        (state.formError ? '<p class="error-banner">' + esc(state.formError) + '</p>' : '') +
         '<label for="f-title">Title<span class="hint">Whatever you’ll recognise it by — the module name is fine.</span></label>' +
         '<input type="text" id="f-title" name="title" maxlength="200" required>' +
         '<label for="f-subject">Subject<span class="hint">Optional, but it helps Claude read the brief in context.</span></label>' +
@@ -356,20 +370,41 @@ ul.plain li:last-child { border-bottom: none; }
     document.getElementById('newForm').addEventListener('submit', handleCreate);
   }
 
+  // Shows or clears an error banner by patching the existing form in place — never by rebuilding
+  // it, which would lose whatever was typed and, worse, the chosen file (a file input's value
+  // can't be restored by JS at all once lost, unlike a re-typed title).
+  function showFormError(message) {
+    state.formError = message || null;
+    var form = document.getElementById('newForm');
+    if (!form) return;
+    var existing = form.querySelector('.error-banner');
+    if (message) {
+      if (existing) { existing.textContent = message; }
+      else {
+        var p = document.createElement('p');
+        p.className = 'error-banner';
+        p.textContent = message;
+        form.insertBefore(p, form.firstChild);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
     var form = e.target;
     var submitBtn = document.getElementById('submitBtn');
-    state.formError = null;
+    showFormError(null);
 
     var brief = form.brief.files[0];
-    if (brief && brief.type !== 'application/pdf') {
-      state.formError = 'The brief must be a PDF.'; render(); return;
-    }
+    if (brief && brief.type !== 'application/pdf') { showFormError('The brief must be a PDF.'); return; }
+    if (brief && brief.size > MAX_FILE_BYTES) { showFormError('That brief is larger than 8MB — try a smaller file.'); return; }
+    var rubric = form.rubric.files[0];
+    if (rubric && rubric.type !== 'application/pdf') { showFormError('The rubric must be a PDF.'); return; }
+    if (rubric && rubric.size > MAX_FILE_BYTES) { showFormError('That rubric is larger than 8MB — try a smaller file.'); return; }
     var startDate = form.start_date.value, endDate = form.end_date.value;
-    if (startDate && endDate && endDate <= startDate) {
-      state.formError = 'The deadline needs to be after the start date.'; render(); return;
-    }
+    if (startDate && endDate && endDate <= startDate) { showFormError('The deadline needs to be after the start date.'); return; }
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Uploading…';
@@ -382,8 +417,11 @@ ul.plain li:last-child { border-bottom: none; }
       render();
       await runAnalyze(created.id);
     } catch (err) {
-      state.formError = err.message;
-      render();
+      // Nothing about the form is touched here — the title, subject, dates and the chosen file
+      // are all exactly as she left them, so trying again is just one more click, not a re-fill.
+      showFormError(err.message);
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create and read the brief';
     }
   }
 
