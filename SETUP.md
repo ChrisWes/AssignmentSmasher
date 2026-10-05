@@ -79,12 +79,12 @@ missing API key, a missing binding, or Claude declining the request) rather than
 
 Built: creating a project from an uploaded brief (and an optional rubric), Claude reading it into
 deliverables, assessment criteria, things worth checking with a tutor, and a milestone plan with
-realistic dates; editing that plan by hand; re-reading the brief if the first pass wasn't right.
+realistic dates; editing that plan by hand; re-reading the brief if the first pass wasn't right;
+expanding any one milestone, on request, into a short step-by-step checklist grounded in the actual
+brief — generated once and stored, collapsed by default, with a Regenerate option.
 
-Not yet built: turning each milestone into day-to-day tasks with how-to steps (the next piece, in the
-same style as the HubSpot course tracker), ticking off progress, and an "I'm stuck" helper. The
-`outline_json` this stores is already shaped to have `tasks` added to each milestone later without
-needing to change what's already saved.
+Not yet built: ticking off progress on those steps, and an "I'm stuck" helper for when a student is
+partway through one and needs a nudge.
 
 ## Local development
 

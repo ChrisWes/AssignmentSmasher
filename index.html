@@ -106,6 +106,15 @@ ul.plain li:last-child { border-bottom: none; }
 .milestone label { margin: 10px 0 4px; font-size: 14px; }
 .milestone .dur-row { display: flex; align-items: center; gap: 10px; }
 .milestone .dur-row input { width: 90px; }
+.steps-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.steps-section .hint { display: inline-block; margin: 8px 0 0; }
+.steps-toggle {
+  background: none; border: 0; padding: 4px 0; min-height: 32px; cursor: pointer;
+  color: var(--link); font: 600 14px/1 'Barlow', sans-serif;
+}
+.steps-list { margin: 10px 0; padding-left: 22px; }
+.steps-list li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.5; }
+.steps-list li::marker { color: var(--accent); font-weight: 700; }
 
 .toast {
   position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 20;
@@ -130,7 +139,7 @@ ul.plain li:last-child { border-bottom: none; }
   var app = document.getElementById('app');
   var state = {
     view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false,
-    email: null, isAdmin: false, adminProjects: [], adminConfirmId: null
+    email: null, isAdmin: false, adminProjects: [], adminConfirmId: null, expandedSteps: {}
   };
 
   function esc(s) {
@@ -506,6 +515,7 @@ ul.plain li:last-child { border-bottom: none; }
         '<label>Goal</label><textarea class="m-goal">' + esc(m.goal) + '</textarea>' +
         '<label>Focused days needed</label>' +
         '<div class="dur-row"><input type="number" class="m-duration" min="1" max="120" value="' + esc(m.duration_days) + '"></div>' +
+        stepsSectionHtml(m, i) +
       '</div>';
     }).join('');
 
@@ -517,8 +527,7 @@ ul.plain li:last-child { border-bottom: none; }
       '<h2 class="section-title">Worth checking with your tutor</h2><ul class="plain ambiguity-list">' + ambiguities + '</ul>' +
       '<h2 class="section-title">Milestones</h2>' + milestones +
       '<div class="form-actions"><button type="button" class="btn btn-accent" id="saveBtn">Save changes</button>' +
-      '<button type="button" class="btn" id="reanalyzeBtn">Re-read the brief</button></div>' +
-      '<p class="hint" style="margin-top:18px;">Steps for each milestone aren’t built yet — for now this is the plan to work from.</p>';
+      '<button type="button" class="btn" id="reanalyzeBtn">Re-read the brief</button></div>';
 
     wireBack();
     updateScheduleSummary();
@@ -527,6 +536,60 @@ ul.plain li:last-child { border-bottom: none; }
     });
     document.getElementById('saveBtn').addEventListener('click', function () { saveOutlineEdits(d.id); });
     document.getElementById('reanalyzeBtn').addEventListener('click', function () { startAnalyzing(d.id); });
+    wireStepsControls(d.id);
+  }
+
+  // ---- Per-milestone steps ----
+
+  function stepsSectionHtml(m, i) {
+    var hasSteps = Array.isArray(m.steps) && m.steps.length > 0;
+    if (!hasSteps) {
+      return '<div class="steps-section">' +
+        '<button type="button" class="btn btn-quiet steps-generate-btn" data-idx="' + i + '">Generate step-by-step instructions</button>' +
+        '<span class="hint">Turns this milestone into a short checklist, grounded in the brief. Uses whatever’s saved above — save any edits to the title or goal first.</span>' +
+      '</div>';
+    }
+    var expanded = !!state.expandedSteps[i];
+    var list = expanded
+      ? '<ol class="steps-list">' + m.steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>' +
+        '<button type="button" class="btn btn-quiet steps-regenerate-btn" data-idx="' + i + '">Regenerate</button>'
+      : '';
+    return '<div class="steps-section">' +
+      '<button type="button" class="steps-toggle" data-idx="' + i + '">' +
+        (expanded ? '−' : '+') + ' ' + (expanded ? 'Hide' : 'Show') + ' steps (' + m.steps.length + ')' +
+      '</button>' + list +
+    '</div>';
+  }
+
+  function wireStepsControls(id) {
+    app.querySelectorAll('.steps-toggle').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idx = Number(btn.getAttribute('data-idx'));
+        state.expandedSteps[idx] = !state.expandedSteps[idx];
+        renderDetail();
+      });
+    });
+    app.querySelectorAll('.steps-generate-btn, .steps-regenerate-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        generateSteps(id, Number(btn.getAttribute('data-idx')), btn);
+      });
+    });
+  }
+
+  async function generateSteps(id, idx, btn) {
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Reading the brief…';
+    try {
+      var data = await api('/api/projects/' + encodeURIComponent(id) + '/milestones/' + idx + '/steps', { method: 'POST' });
+      state.detail.outline.milestones = data.milestones;
+      state.expandedSteps[idx] = true;
+      renderDetail();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+      btn.textContent = original;
+    }
   }
 
   function readMilestonesFromForm() {

@@ -45,6 +45,19 @@ Do this:
 
 If a rubric was provided, check before you finish that the milestones between them touch on every criterion in it.`;
 
+export const StepsSchema = z.object({
+  steps: z.array(z.string()).min(3).max(10)
+});
+
+// Deliberately a separate, narrower prompt from SYSTEM_PROMPT above, not a shared one — this call
+// is scoped to a single already-agreed milestone, not the whole assignment, so it doesn't need
+// (and shouldn't repeat) the instructions about deliverables, criteria or sizing the plan.
+const STEPS_SYSTEM_PROMPT = `You are a study-skills coach helping a college student work through one stage of a piece of coursework. You are not a ghostwriter: you must never produce text, code, or any other content the student could submit as their own work.
+
+You are given the assignment brief (and sometimes a marking rubric), the deliverables and assessment criteria already identified for the whole assignment, and one milestone from the student's plan — its title and goal. Turn that single milestone into a short sequence of concrete steps the student can work through and tick off, in the order they would actually do them.
+
+Each step should say what to physically do — draft a rough outline, list three claims and find a source for each, read back through what you have and mark what is missing — never what the finished work should say. Keep it to around 4 to 8 steps, each short enough to read in one breath. If this milestone is the final check or submission stage, make checking the work against the assessment criteria one of the steps.`;
+
 const SUPPORTED_STRING_FORMATS = new Set([
   'date-time', 'time', 'date', 'duration', 'email', 'hostname', 'uri', 'ipv4', 'ipv6', 'uuid'
 ]);
@@ -141,41 +154,32 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-// brief and rubric are { bytes: ArrayBuffer, contentType: string } | null (rubric only).
-export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief, rubric }) {
-  const client = new Anthropic({ apiKey });
-
-  const totalDays = Math.max(
-    Math.round((toUtc(endDate) - toUtc(startDate)) / 86400000),
-    1
-  );
-
+// Builds the lead text block plus the brief (and optional rubric) document blocks — the part every
+// call to Claude in this file shares. brief and rubric are { bytes: ArrayBuffer, contentType }
+// (rubric may be null).
+function documentContent(leadText, brief, rubric) {
   const content = [
-    {
-      type: 'text',
-      text: `Subject: ${subject || '(not given)'}\nStart date: ${startDate}\nDeadline: ${endDate}\nDays available: ${totalDays}\n\nHere is the assignment brief.`
-    },
-    {
-      type: 'document',
-      source: { type: 'base64', media_type: brief.contentType, data: arrayBufferToBase64(brief.bytes) }
-    }
+    { type: 'text', text: leadText },
+    { type: 'document', source: { type: 'base64', media_type: brief.contentType, data: arrayBufferToBase64(brief.bytes) } }
   ];
   if (rubric) {
     content.push({ type: 'text', text: 'Here is the marking rubric for the same assignment.' });
-    content.push({
-      type: 'document',
-      source: { type: 'base64', media_type: rubric.contentType, data: arrayBufferToBase64(rubric.bytes) }
-    });
+    content.push({ type: 'document', source: { type: 'base64', media_type: rubric.contentType, data: arrayBufferToBase64(rubric.bytes) } });
   }
+  return content;
+}
 
+// Shared request/error/refusal handling for every structured-output call in this file.
+async function callClaude(apiKey, { system, content, format }) {
+  const client = new Anthropic({ apiKey });
   let message;
   try {
     const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 16000,
-      system: SYSTEM_PROMPT,
+      system,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high', format: jsonSchemaOutputFormat(OutlineSchema) },
+      output_config: { effort: 'high', format },
       messages: [{ role: 'user', content }]
     });
     message = await stream.finalMessage();
@@ -185,12 +189,46 @@ export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief,
 
   if (message.stop_reason === 'refusal') {
     const explanation = message.stop_details?.explanation || 'no reason was given';
-    throw new Error(`Claude declined to analyse this brief (${explanation}). Try rephrasing the project title or subject, or check the brief for anything unusual.`);
+    throw new Error(`Claude declined this request (${explanation}). Try rephrasing the project title or subject, or check the brief for anything unusual.`);
   }
   if (!message.parsed_output) {
-    throw new Error('Claude did not return a plan in the expected shape. Try again — if it keeps happening, the brief may be too long or too unusual for this to read.');
+    throw new Error('Claude did not return a result in the expected shape. Try again — if it keeps happening, the brief may be too long or too unusual for this to read.');
   }
   return message.parsed_output;
+}
+
+// brief and rubric are { bytes: ArrayBuffer, contentType: string } | null (rubric only).
+export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief, rubric }) {
+  const totalDays = Math.max(
+    Math.round((toUtc(endDate) - toUtc(startDate)) / 86400000),
+    1
+  );
+
+  const content = documentContent(
+    `Subject: ${subject || '(not given)'}\nStart date: ${startDate}\nDeadline: ${endDate}\nDays available: ${totalDays}\n\nHere is the assignment brief.`,
+    brief, rubric
+  );
+
+  return callClaude(apiKey, { system: SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(OutlineSchema) });
+}
+
+// Expands one already-agreed milestone into a short, concrete checklist. deliverables and
+// assessmentCriteria are the whole assignment's, passed for context; milestone is { title, goal }.
+export async function generateMilestoneSteps(apiKey, { subject, deliverables, assessmentCriteria, milestone, brief, rubric }) {
+  const deliverableLines = (deliverables || []).map((d) => `- ${d.title} (${d.format})`).join('\n') || '(none recorded)';
+  const criteriaLines = (assessmentCriteria || []).map((c) => `- ${c.criterion}${c.weight ? ' (' + c.weight + ')' : ''}`).join('\n') || '(none separately identified)';
+
+  const content = documentContent(
+    `Subject: ${subject || '(not given)'}\n\n` +
+    `Deliverables for the whole assignment:\n${deliverableLines}\n\n` +
+    `Assessment criteria for the whole assignment:\n${criteriaLines}\n\n` +
+    `The milestone to turn into steps:\nTitle: ${milestone.title}\nGoal: ${milestone.goal}\n\n` +
+    `Here is the assignment brief, for context.`,
+    brief, rubric
+  );
+
+  const result = await callClaude(apiKey, { system: STEPS_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(StepsSchema) });
+  return result.steps;
 }
 
 function toUtc(isoDate) {

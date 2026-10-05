@@ -101,11 +101,20 @@ export async function onRequestPatch({ request, env, params }) {
       if (!Number.isInteger(days) || days < 1 || days > 120) return badRequest('Milestone durations must be between 1 and 120 days.');
     }
 
+    // The edit form only ever sends title/goal/duration_days — steps are generated and stored
+    // separately (see milestones/[index]/steps.js) and must survive an otherwise-unrelated edit
+    // here, matched by position since milestones can't yet be added, removed or reordered.
+    const existingMilestones = Array.isArray(existing.milestones) ? existing.milestones : [];
     outlineJson = JSON.stringify({
       deliverables: existing.deliverables,
       assessment_criteria: existing.assessment_criteria,
       ambiguities: existing.ambiguities,
-      milestones: milestones.map((m) => ({ title: m.title.trim(), goal: m.goal.trim(), duration_days: Number(m.duration_days) }))
+      milestones: milestones.map((m, i) => {
+        const out = { title: m.title.trim(), goal: m.goal.trim(), duration_days: Number(m.duration_days) };
+        const prior = existingMilestones[i];
+        if (prior && Array.isArray(prior.steps)) out.steps = prior.steps;
+        return out;
+      })
     });
   }
 
