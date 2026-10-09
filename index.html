@@ -100,12 +100,34 @@ ul.plain li:last-child { border-bottom: none; }
 .overcommit-warning { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin: 10px 0 16px; font-weight: 600; }
 
 .milestone { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
-.milestone .row1 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.milestone.is-done { border-color: var(--accent); background: var(--accent-ink); }
+.milestone .row1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.row1-left { display: flex; align-items: center; gap: 14px; }
 .milestone .num { font: 700 15px/1 'Barlow Condensed', sans-serif; color: var(--muted); }
 .milestone .target { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.milestone-done { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.milestone-done input { width: 16px; height: 16px; cursor: pointer; }
 .milestone label { margin: 10px 0 4px; font-size: 14px; }
 .milestone .dur-row { display: flex; align-items: center; gap: 10px; }
 .milestone .dur-row input { width: 90px; }
+
+.progress-widget { margin: 2px 0 0; }
+.progress-headline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.progress-badge { font: 700 15px/1 'Barlow Condensed', sans-serif; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
+.progress-badge.ahead { background: var(--accent-ink); color: var(--accent); }
+.progress-badge.behind { background: var(--warn-bg); color: var(--warn); }
+.progress-badge.on-track { background: var(--surface2); color: var(--muted); }
+.progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.progress-label { flex: none; width: 110px; font-size: 13px; color: var(--muted); }
+.progress-track {
+  flex: 1; min-width: 0; height: 14px; border-radius: 7px; background: var(--surface2);
+  border: 1px solid var(--line); position: relative; overflow: hidden;
+}
+.progress-fill { position: absolute; inset: 0 auto 0 0; height: 100%; border-radius: 7px 0 0 7px; transition: width .3s ease; }
+.progress-fill.expected { background: var(--muted); opacity: .45; }
+.progress-fill.actual.ahead, .progress-fill.actual.on-track { background: var(--accent); }
+.progress-fill.actual.behind { background: var(--warn); }
+.progress-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bg); opacity: .7; }
 .steps-section { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .steps-section .hint { display: inline-block; margin: 8px 0 0; }
 .steps-toggle {
@@ -229,6 +251,31 @@ ul.plain li:last-child { border-bottom: none; }
     });
     var needed = milestones.reduce(function (s, m) { return s + (Number(m.duration_days) || 0); }, 0);
     return { milestones: scheduled, total_days: totalDays, needed_days: needed, usable_days: usableDays, buffer_days: BUFFER, overcommitted: needed > usableDays };
+  }
+
+  // Expected pace vs actual: "expected" is how many of the plan's days should have been used up
+  // by today, going purely by the milestone schedule (so it tops out at needed_days, not the full
+  // calendar span — the buffer at the end is slack, not assigned to any milestone). "Actual" is the
+  // sum of duration_days for milestones ticked done. The difference is a genuine day count, not a
+  // milestone count, so milestones of very different sizes don't distort it.
+  function computeProgress(startDate, milestonesWithTargetDates, neededDays) {
+    var start = new Date(startDate + 'T00:00:00Z');
+    var todayIso = new Date().toISOString().slice(0, 10);
+    var todayUtc = new Date(todayIso + 'T00:00:00Z');
+    var daysElapsed = Math.round((todayUtc - start) / 86400000);
+    var expectedDays = Math.max(0, Math.min(daysElapsed, neededDays));
+    var actualDays = milestonesWithTargetDates.reduce(function (s, m) { return s + (m.done ? (Number(m.duration_days) || 0) : 0); }, 0);
+    return {
+      today: todayIso,
+      expected_days: expectedDays,
+      actual_days: actualDays,
+      ahead_behind_days: actualDays - expectedDays,
+      expected_pct: neededDays ? Math.min(100, Math.round(expectedDays / neededDays * 100)) : 0,
+      actual_pct: neededDays ? Math.min(100, Math.round(actualDays / neededDays * 100)) : 0,
+      done_count: milestonesWithTargetDates.filter(function (m) { return m.done; }).length,
+      expected_count: milestonesWithTargetDates.filter(function (m) { return m.target_date <= todayIso; }).length,
+      total_count: milestonesWithTargetDates.length
+    };
   }
 
   function render() {
@@ -544,8 +591,10 @@ ul.plain li:last-child { border-bottom: none; }
       : '<li class="none-note">Nothing flagged as unclear.</li>';
 
     var milestones = o.milestones.map(function (m, i) {
-      return '<div class="milestone" data-idx="' + i + '">' +
-        '<div class="row1"><span class="num">Milestone ' + (i + 1) + '</span><span class="target">due around ' + esc(m.target_date) + '</span></div>' +
+      return '<div class="milestone' + (m.done ? ' is-done' : '') + '" data-idx="' + i + '">' +
+        '<div class="row1"><span class="row1-left"><span class="num">Milestone ' + (i + 1) + '</span>' +
+        '<label class="milestone-done"><input type="checkbox" class="m-done" data-idx="' + i + '"' + (m.done ? ' checked' : '') + '> Done</label></span>' +
+        '<span class="target">due around ' + esc(m.target_date) + '</span></div>' +
         '<label>Title</label><input type="text" class="m-title" value="' + esc(m.title) + '">' +
         '<label>Goal</label><textarea class="m-goal">' + esc(m.goal) + '</textarea>' +
         '<label>Focused days needed</label>' +
@@ -555,6 +604,7 @@ ul.plain li:last-child { border-bottom: none; }
     }).join('');
 
     app.innerHTML = head +
+      progressWidgetHtml(d) +
       '<div class="schedule-summary" id="scheduleSummary"></div>' +
       '<div id="overcommitWarning"></div>' +
       '<h2 class="section-title">Deliverables</h2><ul class="plain">' + deliverables + '</ul>' +
@@ -572,8 +622,66 @@ ul.plain li:last-child { border-bottom: none; }
     });
     document.getElementById('saveBtn').addEventListener('click', function () { saveOutlineEdits(d.id); });
     document.getElementById('reanalyzeBtn').addEventListener('click', function () { startAnalyzing(d.id); });
+    wireMilestoneDoneControls(d.id);
     wireStepsControls(d.id);
     wireFeedbackControls(d.id);
+  }
+
+  // ---- Progress: expected pace vs actual, done milestones ----
+
+  function progressWidgetHtml(d) {
+    var o = d.outline;
+    var neededDays = o.schedule.needed_days;
+    var p = computeProgress(d.start_date, o.milestones, neededDays);
+
+    var status = p.ahead_behind_days > 0 ? 'ahead' : p.ahead_behind_days < 0 ? 'behind' : 'on-track';
+    var n = Math.abs(p.ahead_behind_days);
+    var headline = p.ahead_behind_days > 0 ? n + ' day' + (n === 1 ? '' : 's') + ' ahead of schedule'
+      : p.ahead_behind_days < 0 ? n + ' day' + (n === 1 ? '' : 's') + ' behind schedule'
+      : 'On schedule';
+
+    var ticks = '';
+    var cursor = 0;
+    o.milestones.forEach(function (m, i) {
+      cursor += Number(m.duration_days) || 0;
+      if (i === o.milestones.length - 1) return; // the last boundary is the end of the track itself
+      var pct = neededDays ? Math.min(100, cursor / neededDays * 100) : 0;
+      ticks += '<span class="progress-tick" style="left:' + pct + '%"></span>';
+    });
+
+    return '<div class="progress-widget">' +
+      '<div class="progress-headline">' +
+        '<span class="progress-badge ' + status + '">' + esc(headline) + '</span>' +
+        '<span class="meta">' + p.done_count + ' of ' + p.total_count + ' milestones done · ' + p.expected_count + ' expected by today</span>' +
+      '</div>' +
+      '<div class="progress-row"><span class="progress-label">Expected by today</span>' +
+        '<div class="progress-track"><div class="progress-fill expected" style="width:' + p.expected_pct + '%"></div>' + ticks + '</div></div>' +
+      '<div class="progress-row"><span class="progress-label">Actual progress</span>' +
+        '<div class="progress-track"><div class="progress-fill actual ' + status + '" style="width:' + p.actual_pct + '%"></div>' + ticks + '</div></div>' +
+    '</div>';
+  }
+
+  function wireMilestoneDoneControls(id) {
+    app.querySelectorAll('.m-done').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        toggleMilestoneDone(id, Number(cb.getAttribute('data-idx')), cb.checked, cb);
+      });
+    });
+  }
+
+  async function toggleMilestoneDone(id, idx, done, cb) {
+    cb.disabled = true;
+    try {
+      var data = await api('/api/projects/' + encodeURIComponent(id) + '/milestones/' + idx + '/done', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ done: done })
+      });
+      state.detail.outline.milestones = data.milestones;
+      renderDetail();
+    } catch (e) {
+      toast(e.message, true);
+      cb.checked = !done;
+      cb.disabled = false;
+    }
   }
 
   // ---- Per-milestone steps ----

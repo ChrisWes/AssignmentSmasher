@@ -116,6 +116,7 @@ export async function onRequestPatch({ request, env, params }) {
         const out = { title: m.title.trim(), goal: m.goal.trim(), duration_days: Number(m.duration_days) };
         const prior = existingMilestones[i];
         if (prior && Array.isArray(prior.steps)) out.steps = prior.steps;
+        if (prior && typeof prior.done === 'boolean') out.done = prior.done;
         return out;
       })
     });

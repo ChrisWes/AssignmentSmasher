@@ -89,10 +89,14 @@ brief — generated once and stored, collapsed by default, with a Regenerate opt
 or final document to get feedback against the brief, rubric and assessment criteria before
 submitting it for real — requirement checks (word count, format, and so on), strengths and gaps per
 criterion, and a rough indicative band, never a rewrite and never a precise grade. Re-uploading a
-revised draft replaces the old one and clears the old feedback.
+revised draft replaces the old one and clears the old feedback; ticking a milestone done, and a
+progress widget at the top of the project page comparing expected pace (how far through the
+milestone schedule today's date falls) against actual pace (days' worth of ticked milestones), with
+a days-ahead/behind figure — a real day count, not a milestone count, so milestones of different
+sizes don't distort it.
 
-Not yet built: ticking off progress on milestone steps, and an "I'm stuck" helper for when a student
-is partway through one and needs a nudge.
+Not yet built: ticking off individual steps within a milestone (only the milestone itself, for now),
+and an "I'm stuck" helper for when a student is partway through one and needs a nudge.
 
 ## Local development
 
