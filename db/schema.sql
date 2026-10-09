@@ -3,7 +3,10 @@
    projects.status                 draft | analyzing | outline | failed
    projects.outline_json           deliverables / criteria / ambiguities / milestones, see functions/lib/claude.js
    projects.error                  last analysis error, only set when status = failed
-   files.purpose                   brief | rubric
+   projects.feedback_status        NULL | checking | ready | failed -- feedback on an uploaded draft
+   projects.feedback_json          see FeedbackSchema in functions/lib/claude.js
+   projects.feedback_error         last feedback-check error, only set when feedback_status = failed
+   files.purpose                   brief | rubric | submission
 */
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -16,6 +19,9 @@ CREATE TABLE IF NOT EXISTS projects (
   status TEXT NOT NULL DEFAULT 'draft',
   outline_json TEXT,
   error TEXT,
+  feedback_status TEXT,
+  feedback_json TEXT,
+  feedback_error TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

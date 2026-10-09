@@ -58,6 +58,42 @@ You are given the assignment brief (and sometimes a marking rubric), the deliver
 
 Each step should say what to physically do — draft a rough outline, list three claims and find a source for each, read back through what you have and mark what is missing — never what the finished work should say. Keep it to around 4 to 8 steps, each short enough to read in one breath. If this milestone is the final check or submission stage, make checking the work against the assessment criteria one of the steps.`;
 
+const BAND = ['needs_work', 'on_track', 'strong', 'excellent'];
+
+export const FeedbackSchema = z.object({
+  overall_band: z.enum(BAND).describe('A rough overall steer only, never a precise grade.'),
+  overall_summary: z.string().describe('Two or three sentences: the main impression, in plain language.'),
+  deliverable_checks: z.array(z.object({
+    requirement: z.string().describe('One concrete, checkable requirement from the brief — word count, format, required sections, number of sources, and so on.'),
+    met: z.enum(['yes', 'no', 'unclear']),
+    note: z.string().describe('One line explaining the check — state the actual word count found, for example.')
+  })).min(1),
+  criteria: z.array(z.object({
+    criterion: z.string(),
+    band: z.enum(BAND),
+    strengths: z.array(z.string()).describe('What is genuinely working in this piece of work, specific to it — not generic praise.'),
+    gaps: z.array(z.string()).describe('What is missing, thin, or unclear against this criterion, described in general terms only — never a rewritten or suggested replacement sentence.')
+  })).min(1),
+  top_actions: z.array(z.string()).min(1).max(3).describe('The highest-value things to fix before submitting, in priority order.')
+});
+
+// The sharpest boundary in this whole app: this reads the student's own real, assessed work, so
+// the usual "never ghostwrite" rule isn't enough on its own — it must never rewrite or suggest
+// replacement text for any part of what the student already wrote, only describe what's there.
+const FEEDBACK_SYSTEM_PROMPT = `You are a study-skills coach giving a college student feedback on a draft before they submit it, checked against the assignment brief and marking rubric. You are not a marker and not a ghostwriter.
+
+Never rewrite, draft, or suggest replacement text for any part of the student's work, in any amount — not a sentence, not a heading, not a single phrase. Describe what is missing or weak in general terms only, and let the student fix it themselves. If a requirement is unmet, say what is missing, never what to write instead.
+
+You are given the assignment brief, sometimes a marking rubric, the deliverables and assessment criteria already identified for this assignment, and the student's draft or final document as a document to read.
+
+Do this:
+1. Check the draft against each concrete, checkable requirement from the brief — word count, format, required sections, number of sources, and so on. Say whether each is met, not met, or unclear, with one line explaining the check.
+2. For each assessment criterion, give specific strengths genuinely present in this piece of work, and specific gaps — what is missing, thin, or unclear against that criterion.
+3. Give each criterion, and the work overall, a rough band: needs_work, on_track, strong, or excellent. This is a rough steer, not a real mark — a real marker may see it differently, and markers can disagree with each other too. Never imply more precision than that, and never state or imply a percentage or a degree classification.
+4. End with the one to three highest-value things to fix before submitting, in priority order.
+
+Be honest rather than encouraging for its own sake — a student about to submit needs to know what is actually wrong, not to feel good. But be specific and constructive: every gap should be something the student can act on themselves.`;
+
 const SUPPORTED_STRING_FORMATS = new Set([
   'date-time', 'time', 'date', 'duration', 'email', 'hostname', 'uri', 'ipv4', 'ipv6', 'uuid'
 ]);
@@ -154,10 +190,10 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-// Builds the lead text block plus the brief (and optional rubric) document blocks — the part every
-// call to Claude in this file shares. brief and rubric are { bytes: ArrayBuffer, contentType }
-// (rubric may be null).
-function documentContent(leadText, brief, rubric) {
+// Builds the lead text block plus the brief (and optional rubric, and optional one further
+// labelled document) document blocks — the part every call to Claude in this file shares. brief,
+// rubric and extra.file are { bytes: ArrayBuffer, contentType } (rubric and extra may be omitted).
+function documentContent(leadText, brief, rubric, extra) {
   const content = [
     { type: 'text', text: leadText },
     { type: 'document', source: { type: 'base64', media_type: brief.contentType, data: arrayBufferToBase64(brief.bytes) } }
@@ -165,6 +201,10 @@ function documentContent(leadText, brief, rubric) {
   if (rubric) {
     content.push({ type: 'text', text: 'Here is the marking rubric for the same assignment.' });
     content.push({ type: 'document', source: { type: 'base64', media_type: rubric.contentType, data: arrayBufferToBase64(rubric.bytes) } });
+  }
+  if (extra) {
+    content.push({ type: 'text', text: extra.label });
+    content.push({ type: 'document', source: { type: 'base64', media_type: extra.file.contentType, data: arrayBufferToBase64(extra.file.bytes) } });
   }
   return content;
 }
@@ -229,6 +269,24 @@ export async function generateMilestoneSteps(apiKey, { subject, deliverables, as
 
   const result = await callClaude(apiKey, { system: STEPS_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(StepsSchema) });
   return result.steps;
+}
+
+// Checks a draft or final document against the brief, rubric and already-identified deliverables
+// and criteria. submission is { bytes: ArrayBuffer, contentType } — the student's own document.
+export async function checkSubmission(apiKey, { subject, deliverables, assessmentCriteria, submission, brief, rubric }) {
+  const deliverableLines = (deliverables || []).map((d) => `- ${d.title} (${d.format})`).join('\n') || '(none recorded)';
+  const criteriaLines = (assessmentCriteria || []).map((c) => `- ${c.criterion}${c.weight ? ' (' + c.weight + ')' : ''}`).join('\n') || '(none separately identified)';
+
+  const content = documentContent(
+    `Subject: ${subject || '(not given)'}\n\n` +
+    `Deliverables for this assignment:\n${deliverableLines}\n\n` +
+    `Assessment criteria:\n${criteriaLines}\n\n` +
+    `Here is the assignment brief.`,
+    brief, rubric,
+    { label: 'Here is the student’s draft or final document to check.', file: submission }
+  );
+
+  return callClaude(apiKey, { system: FEEDBACK_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(FeedbackSchema) });
 }
 
 function toUtc(isoDate) {

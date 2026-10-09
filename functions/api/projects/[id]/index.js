@@ -29,7 +29,10 @@ function present(row, files) {
     status: row.status, error: row.error || null,
     created_at: row.created_at, updated_at: row.updated_at,
     files: files.map((f) => ({ id: f.id, purpose: f.purpose, filename: f.filename })),
-    outline: null
+    outline: null,
+    feedback_status: row.feedback_status || null,
+    feedback_error: row.feedback_error || null,
+    feedback: row.feedback_json ? JSON.parse(row.feedback_json) : null
   };
   if (row.outline_json) {
     const outline = JSON.parse(row.outline_json);

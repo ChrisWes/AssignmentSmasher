@@ -116,6 +116,41 @@ ul.plain li:last-child { border-bottom: none; }
 .steps-list li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.5; }
 .steps-list li::marker { color: var(--accent); font-weight: 700; }
 
+.submission-upload { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.submission-upload input[type="file"] { flex: 1 1 220px; min-width: 0; }
+
+.band {
+  display: inline-block; font: 700 12px/1 'Barlow', sans-serif; letter-spacing: .02em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+}
+.band-needs_work { background: var(--warn-bg); color: var(--warn); }
+.band-on_track { background: var(--surface2); color: var(--muted); }
+.band-strong { background: var(--accent-ink); color: var(--accent); }
+.band-excellent { background: var(--accent); color: var(--accent-ink); }
+
+.feedback-result { margin-top: 18px; }
+.fb-overall { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 18px; }
+.fb-overall p { margin: 0; max-width: 42em; }
+.fb-subtitle { font-size: 17px; margin: 20px 0 8px; }
+
+.check-row { display: flex; align-items: flex-start; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.check-row:last-child { border-bottom: none; }
+.check-icon {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 13px/1 'Barlow', sans-serif; margin-top: 1px;
+}
+.check-yes .check-icon { background: var(--accent-ink); color: var(--accent); }
+.check-no .check-icon { background: var(--warn-bg); color: var(--warn); }
+.check-unclear .check-icon { background: var(--surface2); color: var(--muted); }
+.check-row .meta { display: block; margin-top: 2px; }
+
+.fb-criterion { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.fb-criterion-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.fb-list { margin: 0 0 6px; padding-left: 20px; }
+.fb-list li { margin-bottom: 4px; font-size: 14.5px; line-height: 1.5; }
+.fb-strength::marker { color: var(--accent); content: '+ '; }
+.fb-gap::marker { color: var(--warn); content: '\2212 '; }
+
 .toast {
   position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 20;
   background: var(--accent); color: var(--accent-ink); padding: 12px 20px; border-radius: 999px;
@@ -527,7 +562,8 @@ ul.plain li:last-child { border-bottom: none; }
       '<h2 class="section-title">Worth checking with your tutor</h2><ul class="plain ambiguity-list">' + ambiguities + '</ul>' +
       '<h2 class="section-title">Milestones</h2>' + milestones +
       '<div class="form-actions"><button type="button" class="btn btn-accent" id="saveBtn">Save changes</button>' +
-      '<button type="button" class="btn" id="reanalyzeBtn">Re-read the brief</button></div>';
+      '<button type="button" class="btn" id="reanalyzeBtn">Re-read the brief</button></div>' +
+      renderFeedbackSection(d);
 
     wireBack();
     updateScheduleSummary();
@@ -537,6 +573,7 @@ ul.plain li:last-child { border-bottom: none; }
     document.getElementById('saveBtn').addEventListener('click', function () { saveOutlineEdits(d.id); });
     document.getElementById('reanalyzeBtn').addEventListener('click', function () { startAnalyzing(d.id); });
     wireStepsControls(d.id);
+    wireFeedbackControls(d.id);
   }
 
   // ---- Per-milestone steps ----
@@ -589,6 +626,119 @@ ul.plain li:last-child { border-bottom: none; }
       toast(e.message, true);
       btn.disabled = false;
       btn.textContent = original;
+    }
+  }
+
+  // ---- Check your draft ----
+
+  function bandLabel(b) {
+    return b === 'needs_work' ? 'Needs work' : b === 'on_track' ? 'On track' : b === 'strong' ? 'Strong' : b === 'excellent' ? 'Excellent' : b;
+  }
+
+  function renderFeedbackSection(d) {
+    var submissionFile = d.files.filter(function (f) { return f.purpose === 'submission'; })[0];
+
+    var html = '<h2 class="section-title">Check your draft</h2>' +
+      '<p class="hint" style="margin:0 0 12px;">Upload your draft or final document (PDF, up to 8MB) for feedback against the brief, rubric and assessment criteria before you submit it for real. This is a rough guide to help you improve it — not an official mark, and not something to submit instead of asking your tutor.</p>';
+
+    if (d.feedback_status === 'checking') {
+      return html + '<div class="progress"><span class="spinner"></span> Reading your draft against the brief and rubric — this can take a minute.</div>';
+    }
+
+    html += '<div class="submission-upload">' +
+      '<input type="file" id="f-submission" accept="application/pdf">' +
+      '<button type="button" class="btn btn-accent" id="uploadCheckBtn">Upload and check</button>' +
+    '</div>';
+
+    if (submissionFile) {
+      html += '<p class="meta" style="margin:10px 0 0;">Currently checked: ' + esc(submissionFile.filename) + '</p>' +
+        '<button type="button" class="btn btn-quiet" id="checkAgainBtn" style="margin:4px 0 0;">' +
+        (d.feedback_status === 'ready' ? 'Check again' : 'Check this draft') + '</button>';
+    }
+
+    if (d.feedback_status === 'failed') {
+      html += '<p class="error-banner">' + esc(d.feedback_error || 'Something went wrong.') + '</p>';
+    }
+
+    if (d.feedback_status === 'ready' && d.feedback) {
+      html += renderFeedbackResult(d.feedback);
+    }
+
+    return html;
+  }
+
+  function renderFeedbackResult(f) {
+    var checks = f.deliverable_checks.map(function (c) {
+      var icon = c.met === 'yes' ? '✓' : c.met === 'no' ? '✗' : '?';
+      return '<li class="check-row check-' + esc(c.met) + '"><span class="check-icon">' + icon + '</span>' +
+        '<span><strong>' + esc(c.requirement) + '</strong><span class="meta">' + esc(c.note) + '</span></span></li>';
+    }).join('');
+
+    var criteria = f.criteria.map(function (c) {
+      var strengths = c.strengths.map(function (s) { return '<li class="fb-strength">' + esc(s) + '</li>'; }).join('');
+      var gaps = c.gaps.map(function (g) { return '<li class="fb-gap">' + esc(g) + '</li>'; }).join('');
+      return '<div class="fb-criterion">' +
+        '<div class="fb-criterion-head"><strong>' + esc(c.criterion) + '</strong>' +
+        '<span class="band band-' + esc(c.band) + '">' + esc(bandLabel(c.band)) + '</span></div>' +
+        (strengths ? '<ul class="plain fb-list">' + strengths + '</ul>' : '') +
+        (gaps ? '<ul class="plain fb-list">' + gaps + '</ul>' : '') +
+      '</div>';
+    }).join('');
+
+    var actions = f.top_actions.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('');
+
+    return '<div class="feedback-result">' +
+      '<div class="fb-overall"><span class="band band-' + esc(f.overall_band) + '">' + esc(bandLabel(f.overall_band)) + '</span>' +
+      '<p>' + esc(f.overall_summary) + '</p></div>' +
+      '<h3 class="fb-subtitle">Requirements</h3><ul class="plain">' + checks + '</ul>' +
+      '<h3 class="fb-subtitle">Against each criterion</h3>' + criteria +
+      '<h3 class="fb-subtitle">Before you submit</h3><ol class="steps-list">' + actions + '</ol>' +
+    '</div>';
+  }
+
+  function wireFeedbackControls(id) {
+    var uploadBtn = document.getElementById('uploadCheckBtn');
+    if (uploadBtn) uploadBtn.addEventListener('click', function () { uploadAndCheck(id, uploadBtn); });
+    var checkAgainBtn = document.getElementById('checkAgainBtn');
+    if (checkAgainBtn) checkAgainBtn.addEventListener('click', function () { runCheck(id, checkAgainBtn); });
+  }
+
+  async function uploadAndCheck(id, btn) {
+    var input = document.getElementById('f-submission');
+    var file = input.files[0];
+    if (!file) { toast('Choose a PDF first.', true); return; }
+    if (file.type !== 'application/pdf') { toast('The document must be a PDF.', true); return; }
+    if (file.size > MAX_FILE_BYTES) { toast('That file is larger than 8MB — try a smaller file.', true); return; }
+
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    try {
+      var fd = new FormData();
+      fd.append('submission', file);
+      await api('/api/projects/' + encodeURIComponent(id) + '/submission', { method: 'POST', body: fd });
+      await runCheck(id, btn);
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  async function runCheck(id, btn) {
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    state.detail = Object.assign({}, state.detail, { feedback_status: 'checking' });
+    renderDetail();
+    try {
+      await api('/api/projects/' + encodeURIComponent(id) + '/check', { method: 'POST' });
+      state.detail = await api('/api/projects/' + encodeURIComponent(id));
+      renderDetail();
+    } catch (e) {
+      toast(e.message, true);
+      state.detail = await api('/api/projects/' + encodeURIComponent(id));
+      renderDetail();
     }
   }
 

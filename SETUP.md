@@ -14,6 +14,10 @@ folder already has one), then tell Claude the repository's URL so it can push wh
 Storage & Databases → D1 SQL database → Create. Name it `assignment-smasher`. Open its **Console**
 tab, paste in the contents of `db/schema.sql`, and run it.
 
+If the database already existed before 2026-10-09 (the "check your draft" feature), it won't have
+the columns that feature needs yet — paste the contents of `db/migrations/001_feedback.sql` into the
+same Console and run it once. A brand new database from `db/schema.sql` already has them; skip this.
+
 ## 3. Create the R2 bucket
 
 R2 → Create bucket. Name it `assignment-smasher-files`. Nothing else to configure — the app only
@@ -81,10 +85,14 @@ Built: creating a project from an uploaded brief (and an optional rubric), Claud
 deliverables, assessment criteria, things worth checking with a tutor, and a milestone plan with
 realistic dates; editing that plan by hand; re-reading the brief if the first pass wasn't right;
 expanding any one milestone, on request, into a short step-by-step checklist grounded in the actual
-brief — generated once and stored, collapsed by default, with a Regenerate option.
+brief — generated once and stored, collapsed by default, with a Regenerate option; uploading a draft
+or final document to get feedback against the brief, rubric and assessment criteria before
+submitting it for real — requirement checks (word count, format, and so on), strengths and gaps per
+criterion, and a rough indicative band, never a rewrite and never a precise grade. Re-uploading a
+revised draft replaces the old one and clears the old feedback.
 
-Not yet built: ticking off progress on those steps, and an "I'm stuck" helper for when a student is
-partway through one and needs a nudge.
+Not yet built: ticking off progress on milestone steps, and an "I'm stuck" helper for when a student
+is partway through one and needs a nudge.
 
 ## Local development
 
