@@ -32,6 +32,10 @@ h1, h2, h3 { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-w
 
 header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
 header.top h1 { font-size: clamp(30px, 6vw, 40px); }
+.version-tag {
+  font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 13px; color: var(--muted);
+  vertical-align: middle; margin-left: 4px;
+}
 .btn {
   font: 600 15px/1 'Barlow', sans-serif; border-radius: 10px; padding: 12px 18px; min-height: 44px;
   cursor: pointer; border: 2px solid var(--line); background: var(--surface); color: var(--text);
@@ -207,6 +211,8 @@ ul.plain li:last-child { border-bottom: none; }
 (function () {
   'use strict';
 
+  var APP_VERSION = '1'; // bump this by hand whenever a deployed change is worth being able to spot
+                           // at a glance — shown next to the title on the dashboard.
   var MAX_FILE_BYTES = 8 * 1024 * 1024; // mirrors functions/api/projects/index.js — checked here
                                           // too so an oversized file never starts uploading at all
   var app = document.getElementById('app');
@@ -331,7 +337,7 @@ ul.plain li:last-child { border-bottom: none; }
     }).join('');
 
     app.innerHTML =
-      '<header class="top"><h1>Assignment Smasher</h1>' +
+      '<header class="top"><h1>Assignment Smasher <span class="version-tag">v' + esc(APP_VERSION) + '</span></h1>' +
       '<span class="header-actions">' +
         (state.isAdmin ? '<button type="button" class="btn btn-quiet" id="adminBtn">Admin</button>' : '') +
         '<button type="button" class="btn btn-accent" id="newBtn">+ New project</button>' +
