@@ -1,6 +1,7 @@
 import { ownerEmail, unauthorized } from '../../../lib/auth.js';
 import { analyzeBrief } from '../../../lib/claude.js';
 import { computeSchedule } from '../../../lib/dates.js';
+import { recordUsageStatement } from '../../../lib/usage.js';
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -39,13 +40,16 @@ export async function onRequestPost({ request, env, params }) {
       if (rubricObj) rubric = { bytes: await rubricObj.arrayBuffer(), contentType: rubricFile.content_type };
     }
 
-    const outline = await analyzeBrief(env.ANTHROPIC_API_KEY, {
+    const { outline, usage } = await analyzeBrief(env.ANTHROPIC_API_KEY, {
       subject: row.subject, startDate: row.start_date, endDate: row.end_date, brief, rubric
     });
 
     const now = Date.now();
-    await env.DB.prepare('UPDATE projects SET status = ?, outline_json = ?, error = NULL, updated_at = ? WHERE id = ?')
-      .bind('outline', JSON.stringify(outline), now, row.id).run();
+    await env.DB.batch([
+      env.DB.prepare('UPDATE projects SET status = ?, outline_json = ?, error = NULL, updated_at = ? WHERE id = ?')
+        .bind('outline', JSON.stringify(outline), now, row.id),
+      recordUsageStatement(env, row.id, usage)
+    ]);
 
     const schedule = computeSchedule(row.start_date, row.end_date, outline.milestones);
     return json({

@@ -56,6 +56,8 @@ header.top h1 { font-size: clamp(30px, 6vw, 40px); }
 .badge-outline { background: var(--accent-ink); color: var(--accent); }
 .badge-failed { background: var(--warn-bg); color: var(--warn); }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+.row-badges { display: flex; align-items: center; gap: 8px; flex: none; }
+.progress-badge.compact { font-size: 12px; padding: 4px 9px; }
 
 .admin-row { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
 .admin-row-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -137,6 +139,11 @@ ul.plain li:last-child { border-bottom: none; }
 .steps-list { margin: 10px 0; padding-left: 22px; }
 .steps-list li { margin-bottom: 8px; font-size: 14.5px; line-height: 1.5; }
 .steps-list li::marker { color: var(--accent); font-weight: 700; }
+.steps-list li.step-row { padding: 3px 0; border-bottom: none; margin-bottom: 0; }
+.step-check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 14.5px; line-height: 1.5; padding: 4px 0; }
+.step-check input { margin-top: 3px; width: 16px; height: 16px; flex: none; cursor: pointer; }
+.step-row.is-done .step-check span { color: var(--muted); text-decoration: line-through; }
+.steps-all-done { margin: 10px 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .submission-upload { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .submission-upload input[type="file"] { flex: 1 1 220px; min-width: 0; }
@@ -196,7 +203,7 @@ ul.plain li:last-child { border-bottom: none; }
   var app = document.getElementById('app');
   var state = {
     view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false,
-    email: null, isAdmin: false, adminProjects: [], adminConfirmId: null, expandedSteps: {}
+    email: null, isAdmin: false, adminProjects: [], adminTotals: null, adminConfirmId: null, expandedSteps: {}
   };
 
   function esc(s) {
@@ -287,12 +294,21 @@ ul.plain li:last-child { border-bottom: none; }
 
   // ---- Dashboard ----
 
+  function compactProgressBadge(p) {
+    if (!p) return '';
+    var n = Math.abs(p.ahead_behind_days);
+    var cls = p.ahead_behind_days > 0 ? 'ahead' : p.ahead_behind_days < 0 ? 'behind' : 'on-track';
+    var label = p.ahead_behind_days > 0 ? n + 'd ahead' : p.ahead_behind_days < 0 ? n + 'd behind' : 'On schedule';
+    return '<span class="progress-badge compact ' + cls + '">' + esc(label) + '</span>';
+  }
+
   function renderDashboard() {
     var rows = state.projects.map(function (p) {
       return '<button type="button" class="project-row" data-open="' + esc(p.id) + '">' +
         '<span><strong>' + esc(p.title) + '</strong>' +
         '<span class="meta">' + esc(p.subject || 'No subject given') + ' · due ' + esc(p.end_date) + '</span></span>' +
-        '<span class="badge badge-' + esc(p.status) + '">' + esc(statusLabel(p.status)) + '</span>' +
+        '<span class="row-badges">' + compactProgressBadge(p.progress) +
+        '<span class="badge badge-' + esc(p.status) + '">' + esc(statusLabel(p.status)) + '</span></span>' +
       '</button>';
     }).join('');
 
@@ -347,8 +363,10 @@ ul.plain li:last-child { border-bottom: none; }
     try {
       var data = await api('/api/admin/projects');
       state.adminProjects = data.projects || [];
+      state.adminTotals = data.totals || null;
     } catch (e) {
       state.adminProjects = [];
+      state.adminTotals = null;
       toast(e.message, true);
     }
     render();
@@ -358,11 +376,13 @@ ul.plain li:last-child { border-bottom: none; }
     var count = state.adminProjects.length;
     var rows = state.adminProjects.map(function (p) {
       var confirming = state.adminConfirmId === p.id;
+      var calls = p.ai_calls || 0;
       return '<div class="admin-row" data-id="' + esc(p.id) + '">' +
         '<div class="admin-row-top">' +
           '<div class="admin-row-main">' +
             '<strong>' + esc(p.title) + '</strong>' +
             '<span class="meta">' + esc(p.owner_email) + ' · ' + esc(p.subject || 'No subject given') + ' · due ' + esc(p.end_date) + '</span>' +
+            '<span class="meta">' + calls + ' AI call' + (calls === 1 ? '' : 's') + ' · ~$' + p.estimated_cost_usd.toFixed(2) + ' estimated</span>' +
           '</div>' +
           '<span class="badge badge-' + esc(p.status) + '">' + esc(statusLabel(p.status)) + '</span>' +
           (confirming ? '' : '<button type="button" class="btn btn-warn-outline delete-btn">Delete</button>') +
@@ -380,10 +400,17 @@ ul.plain li:last-child { border-bottom: none; }
       '</div>';
     }).join('');
 
+    var totalsLine = state.adminTotals
+      ? '<p class="meta" style="margin:0 0 18px;">' + state.adminTotals.calls + ' AI call' + (state.adminTotals.calls === 1 ? '' : 's') +
+        ' across all projects · ~$' + state.adminTotals.estimated_cost_usd.toFixed(2) +
+        ' estimated (Opus 5 rates, before any prompt-cache discount, so the real bill will usually be a little lower)</p>'
+      : '';
+
     app.innerHTML =
       '<header class="top"><h1>Admin</h1>' +
       '<button type="button" class="btn btn-quiet" id="backBtn">← Back to dashboard</button></header>' +
-      '<p class="meta" style="margin:-14px 0 18px;">' + count + ' project' + (count === 1 ? '' : 's') + ' across every account.</p>' +
+      '<p class="meta" style="margin:-14px 0 6px;">' + count + ' project' + (count === 1 ? '' : 's') + ' across every account.</p>' +
+      totalsLine +
       (count ? rows : '<p class="empty">No projects yet.</p>');
 
     wireBack();
@@ -686,6 +713,12 @@ ul.plain li:last-child { border-bottom: none; }
 
   // ---- Per-milestone steps ----
 
+  // A step is either a bare string (generated before step-ticking existed) or { text, done } —
+  // normalise on every read so rendering never has to care which it finds.
+  function normalizeStep(s) {
+    return typeof s === 'string' ? { text: s, done: false } : s;
+  }
+
   function stepsSectionHtml(m, i) {
     var hasSteps = Array.isArray(m.steps) && m.steps.length > 0;
     if (!hasSteps) {
@@ -694,14 +727,23 @@ ul.plain li:last-child { border-bottom: none; }
         '<span class="hint">Turns this milestone into a short checklist, grounded in the brief. Uses whatever’s saved above — save any edits to the title or goal first.</span>' +
       '</div>';
     }
+    var steps = m.steps.map(normalizeStep);
+    var doneCount = steps.filter(function (s) { return s.done; }).length;
     var expanded = !!state.expandedSteps[i];
+    var allDone = doneCount === steps.length;
     var list = expanded
-      ? '<ol class="steps-list">' + m.steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>' +
+      ? '<ul class="plain steps-list">' + steps.map(function (s, si) {
+          return '<li class="step-row' + (s.done ? ' is-done' : '') + '">' +
+            '<label class="step-check"><input type="checkbox" class="s-done" data-idx="' + i + '" data-step="' + si + '"' + (s.done ? ' checked' : '') + '> ' +
+            '<span>' + esc(s.text) + '</span></label>' +
+          '</li>';
+        }).join('') + '</ul>' +
+        (allDone && !m.done ? '<p class="hint steps-all-done">All steps ticked. <button type="button" class="btn btn-quiet mark-milestone-done-btn" data-idx="' + i + '">Mark the milestone done too</button></p>' : '') +
         '<button type="button" class="btn btn-quiet steps-regenerate-btn" data-idx="' + i + '">Regenerate</button>'
       : '';
     return '<div class="steps-section">' +
       '<button type="button" class="steps-toggle" data-idx="' + i + '">' +
-        (expanded ? '−' : '+') + ' ' + (expanded ? 'Hide' : 'Show') + ' steps (' + m.steps.length + ')' +
+        (expanded ? '−' : '+') + ' ' + (expanded ? 'Hide' : 'Show') + ' steps (' + doneCount + '/' + steps.length + ' done)' +
       '</button>' + list +
     '</div>';
   }
@@ -719,6 +761,34 @@ ul.plain li:last-child { border-bottom: none; }
         generateSteps(id, Number(btn.getAttribute('data-idx')), btn);
       });
     });
+    app.querySelectorAll('.s-done').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        toggleStepDone(id, Number(cb.getAttribute('data-idx')), Number(cb.getAttribute('data-step')), cb.checked, cb);
+      });
+    });
+    app.querySelectorAll('.mark-milestone-done-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idx = Number(btn.getAttribute('data-idx'));
+        var cb = app.querySelector('.m-done[data-idx="' + idx + '"]');
+        if (cb && !cb.checked) { cb.checked = true; toggleMilestoneDone(id, idx, true, cb); }
+      });
+    });
+  }
+
+  async function toggleStepDone(id, idx, stepIdx, done, cb) {
+    cb.disabled = true;
+    try {
+      var data = await api('/api/projects/' + encodeURIComponent(id) + '/milestones/' + idx + '/steps/' + stepIdx + '/done', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ done: done })
+      });
+      state.detail.outline.milestones = data.milestones;
+      state.expandedSteps[idx] = true;
+      renderDetail();
+    } catch (e) {
+      toast(e.message, true);
+      cb.checked = !done;
+      cb.disabled = false;
+    }
   }
 
   async function generateSteps(id, idx, btn) {

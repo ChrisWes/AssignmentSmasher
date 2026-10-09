@@ -42,3 +42,23 @@ export function computeSchedule(startDate, endDate, milestones) {
     overcommitted: neededDays > usableDays
   };
 }
+
+// Expected pace vs actual, as a genuine day count rather than a milestone count, so milestones of
+// very different sizes don't distort it. "Expected" is measured against the milestone schedule
+// itself (cumulative duration_days), not the full calendar span to the deadline — the buffer days
+// above are slack, not assigned to any milestone. Mirrored client-side in index.html's own
+// computeProgress for the project detail page's live widget; this copy exists so the dashboard's
+// project list can show a day count for every project without shipping each one's full outline.
+export function computeProgress(startDate, milestones, neededDays) {
+  const start = toUtcDate(startDate);
+  const todayIso = isoDate(new Date());
+  const todayUtc = toUtcDate(todayIso);
+  const daysElapsed = Math.round((todayUtc - start) / 86400000);
+  const expectedDays = Math.max(0, Math.min(daysElapsed, neededDays));
+  const actualDays = milestones.reduce((sum, m) => sum + (m.done ? (Number(m.duration_days) || 0) : 0), 0);
+  return {
+    ahead_behind_days: actualDays - expectedDays,
+    done_count: milestones.filter((m) => m.done).length,
+    total_count: milestones.length
+  };
+}

@@ -1,6 +1,7 @@
 import { ownerEmail, unauthorized } from '../../../../../lib/auth.js';
 import { generateMilestoneSteps } from '../../../../../lib/claude.js';
 import { computeSchedule } from '../../../../../lib/dates.js';
+import { recordUsageStatement } from '../../../../../lib/usage.js';
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -43,7 +44,7 @@ export async function onRequestPost({ request, env, params }) {
       if (rubricObj) rubric = { bytes: await rubricObj.arrayBuffer(), contentType: rubricFile.content_type };
     }
 
-    const steps = await generateMilestoneSteps(env.ANTHROPIC_API_KEY, {
+    const { steps, usage } = await generateMilestoneSteps(env.ANTHROPIC_API_KEY, {
       subject: row.subject,
       deliverables: outline.deliverables,
       assessmentCriteria: outline.assessment_criteria,
@@ -51,10 +52,15 @@ export async function onRequestPost({ request, env, params }) {
       brief, rubric
     });
 
-    outline.milestones[idx] = Object.assign({}, milestone, { steps });
+    // Each step is tickable on its own (see milestones/[index]/steps/[stepIndex]/done.js) — stored
+    // as an object, not a bare string, so there's somewhere to put that state. A regenerate here
+    // always starts the new list fresh (done: false), same as a fresh generate.
+    outline.milestones[idx] = Object.assign({}, milestone, { steps: steps.map((text) => ({ text, done: false })) });
     const now = Date.now();
-    await env.DB.prepare('UPDATE projects SET outline_json = ?, updated_at = ? WHERE id = ?')
-      .bind(JSON.stringify(outline), now, row.id).run();
+    await env.DB.batch([
+      env.DB.prepare('UPDATE projects SET outline_json = ?, updated_at = ? WHERE id = ?').bind(JSON.stringify(outline), now, row.id),
+      recordUsageStatement(env, row.id, usage)
+    ]);
 
     const schedule = computeSchedule(row.start_date, row.end_date, outline.milestones);
     return json({ milestones: schedule.milestones });

@@ -234,7 +234,11 @@ async function callClaude(apiKey, { system, content, format }) {
   if (!message.parsed_output) {
     throw new Error('Claude did not return a result in the expected shape. Try again — if it keeps happening, the brief may be too long or too unusual for this to read.');
   }
-  return message.parsed_output;
+  // usage is only ever returned alongside a successful parsed_output — a refusal or a malformed
+  // response throws above instead of reaching here, so those (rare) cases go untracked rather than
+  // attaching usage to a thrown error. This is a rough running total for the admin screen, not a
+  // bill reconciliation, and that gap is small in practice.
+  return { output: message.parsed_output, usage: message.usage || {} };
 }
 
 // brief and rubric are { bytes: ArrayBuffer, contentType: string } | null (rubric only).
@@ -249,7 +253,8 @@ export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief,
     brief, rubric
   );
 
-  return callClaude(apiKey, { system: SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(OutlineSchema) });
+  const result = await callClaude(apiKey, { system: SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(OutlineSchema) });
+  return { outline: result.output, usage: result.usage };
 }
 
 // Expands one already-agreed milestone into a short, concrete checklist. deliverables and
@@ -268,7 +273,7 @@ export async function generateMilestoneSteps(apiKey, { subject, deliverables, as
   );
 
   const result = await callClaude(apiKey, { system: STEPS_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(StepsSchema) });
-  return result.steps;
+  return { steps: result.output.steps, usage: result.usage };
 }
 
 // Checks a draft or final document against the brief, rubric and already-identified deliverables
@@ -286,7 +291,8 @@ export async function checkSubmission(apiKey, { subject, deliverables, assessmen
     { label: 'Here is the student’s draft or final document to check.', file: submission }
   );
 
-  return callClaude(apiKey, { system: FEEDBACK_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(FeedbackSchema) });
+  const result = await callClaude(apiKey, { system: FEEDBACK_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(FeedbackSchema) });
+  return { feedback: result.output, usage: result.usage };
 }
 
 function toUtc(isoDate) {

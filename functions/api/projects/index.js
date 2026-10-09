@@ -1,4 +1,5 @@
 import { ownerEmail, unauthorized } from '../../lib/auth.js';
+import { computeProgress } from '../../lib/dates.js';
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8MB — generous for a text brief, tight enough to stay
                                           // well under Claude's combined-request document limit
@@ -23,11 +24,30 @@ export async function onRequestGet({ request, env }) {
   if (!env.DB) return json({ error: 'Database not bound' }, 500);
 
   const rows = await env.DB.prepare(
-    'SELECT id, title, subject, start_date, end_date, status, created_at, updated_at FROM projects ' +
+    'SELECT id, title, subject, start_date, end_date, status, outline_json, created_at, updated_at FROM projects ' +
     'WHERE owner_email = ? ORDER BY created_at DESC'
   ).bind(owner).all();
 
-  return json({ projects: rows.results });
+  // A light-weight ahead/behind figure per project, for the dashboard badge — not the full
+  // outline, which the project detail page fetches separately when actually opened.
+  const projects = rows.results.map((row) => {
+    const out = {
+      id: row.id, title: row.title, subject: row.subject, start_date: row.start_date, end_date: row.end_date,
+      status: row.status, created_at: row.created_at, updated_at: row.updated_at, progress: null
+    };
+    if (row.outline_json) {
+      try {
+        const outline = JSON.parse(row.outline_json);
+        if (Array.isArray(outline.milestones) && outline.milestones.length) {
+          const neededDays = outline.milestones.reduce((s, m) => s + (Number(m.duration_days) || 0), 0);
+          out.progress = computeProgress(row.start_date, outline.milestones, neededDays);
+        }
+      } catch (e) { /* a malformed outline shouldn't break the whole dashboard list */ }
+    }
+    return out;
+  });
+
+  return json({ projects });
 }
 
 export async function onRequestPost({ request, env }) {

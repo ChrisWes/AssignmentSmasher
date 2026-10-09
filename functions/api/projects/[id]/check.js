@@ -1,5 +1,6 @@
 import { ownerEmail, unauthorized } from '../../../lib/auth.js';
 import { checkSubmission } from '../../../lib/claude.js';
+import { recordUsageStatement } from '../../../lib/usage.js';
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -46,7 +47,7 @@ export async function onRequestPost({ request, env, params }) {
     const submission = { bytes: await submissionObj.arrayBuffer(), contentType: submissionFile.content_type };
 
     const outline = JSON.parse(row.outline_json);
-    const feedback = await checkSubmission(env.ANTHROPIC_API_KEY, {
+    const { feedback, usage } = await checkSubmission(env.ANTHROPIC_API_KEY, {
       subject: row.subject,
       deliverables: outline.deliverables,
       assessmentCriteria: outline.assessment_criteria,
@@ -54,8 +55,11 @@ export async function onRequestPost({ request, env, params }) {
     });
 
     const now = Date.now();
-    await env.DB.prepare('UPDATE projects SET feedback_status = ?, feedback_json = ?, feedback_error = NULL, updated_at = ? WHERE id = ?')
-      .bind('ready', JSON.stringify(feedback), now, row.id).run();
+    await env.DB.batch([
+      env.DB.prepare('UPDATE projects SET feedback_status = ?, feedback_json = ?, feedback_error = NULL, updated_at = ? WHERE id = ?')
+        .bind('ready', JSON.stringify(feedback), now, row.id),
+      recordUsageStatement(env, row.id, usage)
+    ]);
 
     return json({ feedback });
   } catch (err) {
