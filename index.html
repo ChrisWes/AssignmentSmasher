@@ -11,13 +11,13 @@
 :root {
   --bg:#f4f2fb; --surface:#ffffff; --surface2:#ebe7f8; --text:#1c1533; --muted:#5d5680;
   --line:#d8d1ee; --accent:#2f8f5b; --accent-ink:#eafff3; --warn:#b8380c; --warn-bg:#fff1ec;
-  --link:#4a2fc2; color-scheme: light;
+  --link:#4a2fc2; --info:#1d5fd6; --info-bg:#e8f0ff; color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg:#16112a; --surface:#1f1839; --surface2:#2a2150; --text:#f1edfc; --muted:#a9a1cc;
     --line:#372e62; --accent:#4bd18a; --accent-ink:#08160f; --warn:#ff8a6a; --warn-bg:#3a1c14;
-    --link:#b7a6ff; color-scheme: dark;
+    --link:#b7a6ff; --info:#7ab3ff; --info-bg:#182c4d; color-scheme: dark;
   }
 }
 * { box-sizing: border-box; }
@@ -98,8 +98,11 @@ ul.plain li:last-child { border-bottom: none; }
 .ambiguity-list li:last-child { border-bottom: none; }
 .none-note { color: var(--muted); font-style: italic; }
 
-.schedule-summary { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin: 10px 0 4px; }
-.overcommit-warning { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin: 10px 0 16px; font-weight: 600; }
+.schedule-summary {
+  display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 16px;
+  margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--line);
+}
+.overcommit-warning { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 12px 14px; margin: 14px 0 0; font-weight: 600; }
 
 .milestone { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
 .milestone.is-done { border-color: var(--accent); background: var(--accent-ink); }
@@ -113,20 +116,25 @@ ul.plain li:last-child { border-bottom: none; }
 .milestone .dur-row { display: flex; align-items: center; gap: 10px; }
 .milestone .dur-row input { width: 90px; }
 
-.progress-widget { margin: 2px 0 6px; }
+.progress-widget {
+  margin: 2px 0 26px; background: var(--surface); border: 2px solid var(--info);
+  border-radius: 16px; padding: 22px 24px; box-shadow: 0 2px 14px rgba(29,95,214,.08);
+}
 .progress-headline { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .progress-badge { font: 700 28px/1 'Barlow Condensed', sans-serif; padding: 10px 20px; border-radius: 999px; white-space: nowrap; }
 .progress-badge.ahead { background: var(--accent-ink); color: var(--accent); }
 .progress-badge.behind { background: var(--warn-bg); color: var(--warn); }
 .progress-badge.on-track { background: var(--surface2); color: var(--muted); }
-.progress-headline .meta { font-size: 15px; }
-.progress-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
-.progress-label { flex: none; width: 140px; font-size: 15px; font-weight: 600; color: var(--muted); }
+.progress-badge.due { background: var(--info-bg); color: var(--info); }
+.progress-meta { margin: 0 0 18px; font-size: 16px; color: var(--muted); }
+.progress-row { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.progress-row:last-of-type { margin-bottom: 0; }
+.progress-label { flex: none; width: 170px; font-size: 17px; font-weight: 700; color: var(--info); }
 .progress-track {
-  flex: 1; min-width: 0; height: 26px; border-radius: 13px; background: var(--surface2);
-  border: 1px solid var(--line); position: relative; overflow: hidden;
+  flex: 1; min-width: 0; height: 32px; border-radius: 16px; background: var(--surface2);
+  border: 1px solid var(--info); position: relative; overflow: hidden;
 }
-.progress-fill { position: absolute; inset: 0 auto 0 0; height: 100%; border-radius: 13px 0 0 13px; transition: width .3s ease; }
+.progress-fill { position: absolute; inset: 0 auto 0 0; height: 100%; border-radius: 16px 0 0 16px; transition: width .3s ease; }
 .progress-fill.expected { background: var(--muted); opacity: .45; }
 .progress-fill.actual.ahead, .progress-fill.actual.on-track { background: var(--accent); }
 .progress-fill.actual.behind { background: var(--warn); }
@@ -223,6 +231,15 @@ ul.plain li:last-child { border-bottom: none; }
 
   function todayISO() { return new Date().toISOString().slice(0, 10); }
 
+  // Dates are stored and sent as ISO (yyyy-mm-dd) throughout — needed for <input type="date">,
+  // for sorting, and for the date arithmetic elsewhere in this file. This only reformats a date
+  // for on-screen text, UK-style (dd-mm-yyyy); never use it on a value an input or the API expects.
+  function formatDateUK(iso) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+    var parts = iso.split('-');
+    return parts[2] + '-' + parts[1] + '-' + parts[0];
+  }
+
   async function api(path, options) {
     var res;
     try {
@@ -307,7 +324,7 @@ ul.plain li:last-child { border-bottom: none; }
     var rows = state.projects.map(function (p) {
       return '<button type="button" class="project-row" data-open="' + esc(p.id) + '">' +
         '<span><strong>' + esc(p.title) + '</strong>' +
-        '<span class="meta">' + esc(p.subject || 'No subject given') + ' · due ' + esc(p.end_date) + '</span></span>' +
+        '<span class="meta">' + esc(p.subject || 'No subject given') + ' · due ' + esc(formatDateUK(p.end_date)) + '</span></span>' +
         '<span class="row-badges">' + compactProgressBadge(p.progress) +
         '<span class="badge badge-' + esc(p.status) + '">' + esc(statusLabel(p.status)) + '</span></span>' +
       '</button>';
@@ -382,7 +399,7 @@ ul.plain li:last-child { border-bottom: none; }
         '<div class="admin-row-top">' +
           '<div class="admin-row-main">' +
             '<strong>' + esc(p.title) + '</strong>' +
-            '<span class="meta">' + esc(p.owner_email) + ' · ' + esc(p.subject || 'No subject given') + ' · due ' + esc(p.end_date) + '</span>' +
+            '<span class="meta">' + esc(p.owner_email) + ' · ' + esc(p.subject || 'No subject given') + ' · due ' + esc(formatDateUK(p.end_date)) + '</span>' +
             '<span class="meta">' + calls + ' AI call' + (calls === 1 ? '' : 's') + ' · ~$' + p.estimated_cost_usd.toFixed(2) + ' estimated</span>' +
           '</div>' +
           '<span class="badge badge-' + esc(p.status) + '">' + esc(statusLabel(p.status)) + '</span>' +
@@ -581,7 +598,7 @@ ul.plain li:last-child { border-bottom: none; }
 
     var head = '<header class="top"><h1>' + esc(d.title) + '</h1>' + back + '</header>' +
       '<p class="meta" style="color:var(--muted); margin:-14px 0 18px;">' + esc(d.subject || 'No subject given') +
-      ' · ' + esc(d.start_date) + ' to ' + esc(d.end_date) + '</p>';
+      ' · ' + esc(formatDateUK(d.start_date)) + ' to ' + esc(formatDateUK(d.end_date)) + '</p>';
 
     if (d.status === 'draft') {
       app.innerHTML = head + '<div class="card"><p>This brief hasn’t been read yet.</p>' +
@@ -622,7 +639,7 @@ ul.plain li:last-child { border-bottom: none; }
       return '<div class="milestone' + (m.done ? ' is-done' : '') + '" data-idx="' + i + '">' +
         '<div class="row1"><span class="row1-left"><span class="num">Milestone ' + (i + 1) + '</span>' +
         '<label class="milestone-done"><input type="checkbox" class="m-done" data-idx="' + i + '"' + (m.done ? ' checked' : '') + '> Done</label></span>' +
-        '<span class="target">due around ' + esc(m.target_date) + '</span></div>' +
+        '<span class="target">due around ' + esc(formatDateUK(m.target_date)) + '</span></div>' +
         '<label>Title</label><input type="text" class="m-title" value="' + esc(m.title) + '">' +
         '<label>Goal</label><textarea class="m-goal">' + esc(m.goal) + '</textarea>' +
         '<label>Focused days needed</label>' +
@@ -633,8 +650,6 @@ ul.plain li:last-child { border-bottom: none; }
 
     app.innerHTML = head +
       progressWidgetHtml(d) +
-      '<div class="schedule-summary" id="scheduleSummary"></div>' +
-      '<div id="overcommitWarning"></div>' +
       '<h2 class="section-title">Deliverables</h2><ul class="plain">' + deliverables + '</ul>' +
       '<h2 class="section-title">Assessment criteria</h2><ul class="plain">' + criteria + '</ul>' +
       '<h2 class="section-title">Worth checking with your tutor</h2><ul class="plain ambiguity-list">' + ambiguities + '</ul>' +
@@ -680,12 +695,15 @@ ul.plain li:last-child { border-bottom: none; }
     return '<div class="progress-widget">' +
       '<div class="progress-headline">' +
         '<span class="progress-badge ' + status + '">' + esc(headline) + '</span>' +
-        '<span class="meta">' + p.done_count + ' of ' + p.total_count + ' milestones done · ' + p.expected_count + ' expected by today</span>' +
+        '<span class="progress-badge due">Assignment required by ' + esc(formatDateUK(d.end_date)) + '</span>' +
       '</div>' +
+      '<p class="progress-meta">' + p.done_count + ' of ' + p.total_count + ' milestones done · ' + p.expected_count + ' expected by today</p>' +
       '<div class="progress-row"><span class="progress-label">Expected by today</span>' +
         '<div class="progress-track"><div class="progress-fill expected" style="width:' + p.expected_pct + '%"></div>' + ticks + '</div></div>' +
       '<div class="progress-row"><span class="progress-label">Actual progress</span>' +
         '<div class="progress-track"><div class="progress-fill actual ' + status + '" style="width:' + p.actual_pct + '%"></div>' + ticks + '</div></div>' +
+      '<div class="schedule-summary" id="scheduleSummary"></div>' +
+      '<div id="overcommitWarning"></div>' +
     '</div>';
   }
 
@@ -944,7 +962,7 @@ ul.plain li:last-child { border-bottom: none; }
         sched.usable_days + ' usable before the deadline (' + sched.buffer_days + ' days kept spare at the end). Trim a milestone or two below.</p>'
       : '';
     app.querySelectorAll('.milestone').forEach(function (el, i) {
-      el.querySelector('.target').textContent = 'due around ' + sched.milestones[i].target_date;
+      el.querySelector('.target').textContent = 'due around ' + formatDateUK(sched.milestones[i].target_date);
     });
   }
 
