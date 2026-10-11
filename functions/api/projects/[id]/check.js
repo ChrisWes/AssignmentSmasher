@@ -1,6 +1,7 @@
 import { ownerEmail, unauthorized } from '../../../lib/auth.js';
 import { checkSubmission } from '../../../lib/claude.js';
 import { recordUsageStatement } from '../../../lib/usage.js';
+import { readSupportingFiles } from '../../../lib/files.js';
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -47,12 +48,13 @@ export async function onRequestPost({ request, env, params }) {
     const submission = { bytes: await submissionObj.arrayBuffer(), contentType: submissionFile.content_type };
 
     const outline = JSON.parse(row.outline_json);
+    const supporting = await readSupportingFiles(env, files);
     const { feedback, usage } = await checkSubmission(env.ANTHROPIC_API_KEY, {
       subject: row.subject,
       deliverables: outline.deliverables,
       assessmentCriteria: outline.assessment_criteria,
       submission, brief, rubric,
-      additionalContext: row.additional_context
+      additionalContext: row.additional_context, supporting
     });
 
     const now = Date.now();

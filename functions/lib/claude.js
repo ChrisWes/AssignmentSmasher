@@ -208,9 +208,6 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-// Builds the lead text block plus the brief (and optional rubric, and optional one further
-// labelled document) document blocks — the part every call to Claude in this file shares. brief,
-// rubric and extra.file are { bytes: ArrayBuffer, contentType } (rubric and extra may be omitted).
 // Folds in the free-text "additional context" from the project settings page — answers to
 // questions the brief left open, a tutor's notes, things to focus on. It's the student's own
 // account of their situation, not part of the brief itself, so it's framed as a separate note
@@ -222,7 +219,24 @@ function withAdditionalContext(leadText, additionalContext) {
   return leadText + `\n\nThe student has also added this extra context on the project settings page, since the brief was first read — things like answers to questions the brief left open, a tutor's notes, or what to focus on. Take it into account, but the brief and rubric still set the actual requirements if the two ever disagree.\n\n"""\n${trimmed}\n"""`;
 }
 
-function documentContent(leadText, brief, rubric, extra) {
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+// Claude reads an image and a PDF through different content block types — this builds whichever
+// one fits, so callers (documentContent below) don't need to know the difference. file is
+// { bytes: ArrayBuffer, contentType }.
+function fileContentBlock(file) {
+  // Some browsers/OSes report the nonstandard "image/jpg" for a JPEG rather than "image/jpeg" —
+  // normalise it rather than reject a perfectly good photo over a spelling difference.
+  const contentType = file.contentType === 'image/jpg' ? 'image/jpeg' : file.contentType;
+  const type = IMAGE_TYPES.has(contentType) ? 'image' : 'document';
+  return { type, source: { type: 'base64', media_type: contentType, data: arrayBufferToBase64(file.bytes) } };
+}
+
+// Builds the lead text block plus the brief (and optional rubric, optional supporting files, and
+// optional one further labelled document) content blocks — the part every call to Claude in this
+// file shares. brief, rubric, extra.file and each entry of supporting are
+// { bytes: ArrayBuffer, contentType } (rubric, supporting and extra may be omitted).
+function documentContent(leadText, brief, rubric, extra, supporting) {
   const content = [
     { type: 'text', text: leadText },
     { type: 'document', source: { type: 'base64', media_type: brief.contentType, data: arrayBufferToBase64(brief.bytes) } }
@@ -230,6 +244,15 @@ function documentContent(leadText, brief, rubric, extra) {
   if (rubric) {
     content.push({ type: 'text', text: 'Here is the marking rubric for the same assignment.' });
     content.push({ type: 'document', source: { type: 'base64', media_type: rubric.contentType, data: arrayBufferToBase64(rubric.bytes) } });
+  }
+  if (supporting && supporting.length) {
+    content.push({
+      type: 'text',
+      text: 'The student also added ' + (supporting.length === 1 ? 'this supporting file' : 'these ' + supporting.length + ' supporting files') +
+        ' for extra context — things like lecture notes, a photo of a whiteboard or handwritten notes, or earlier feedback. ' +
+        'They are not the brief or the rubric, which still set the actual requirements.'
+    });
+    supporting.forEach((file) => content.push(fileContentBlock(file)));
   }
   if (extra) {
     content.push({ type: 'text', text: extra.label });
@@ -282,7 +305,7 @@ async function callClaude(apiKey, { system, content, format }) {
 // brief and rubric are { bytes: ArrayBuffer, contentType: string } | null (rubric only).
 // additionalContext is the free text from the project settings page, if any (see
 // withAdditionalContext above).
-export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief, rubric, additionalContext }) {
+export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief, rubric, additionalContext, supporting }) {
   const totalDays = Math.max(
     Math.round((toUtc(endDate) - toUtc(startDate)) / 86400000),
     1
@@ -293,7 +316,7 @@ export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief,
       `Subject: ${subject || '(not given)'}\nStart date: ${startDate}\nDeadline: ${endDate}\nDays available: ${totalDays}\n\nHere is the assignment brief.`,
       additionalContext
     ),
-    brief, rubric
+    brief, rubric, null, supporting
   );
 
   const result = await callClaude(apiKey, { system: SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(OutlineSchema) });
@@ -302,7 +325,7 @@ export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief,
 
 // Expands one already-agreed milestone into a short, concrete checklist. deliverables and
 // assessmentCriteria are the whole assignment's, passed for context; milestone is { title, goal }.
-export async function generateMilestoneSteps(apiKey, { subject, deliverables, assessmentCriteria, milestone, brief, rubric, additionalContext }) {
+export async function generateMilestoneSteps(apiKey, { subject, deliverables, assessmentCriteria, milestone, brief, rubric, additionalContext, supporting }) {
   const deliverableLines = (deliverables || []).map((d) => `- ${d.title} (${d.format})`).join('\n') || '(none recorded)';
   const criteriaLines = (assessmentCriteria || []).map((c) => `- ${c.criterion}${c.weight ? ' (' + c.weight + ')' : ''}`).join('\n') || '(none separately identified)';
 
@@ -315,7 +338,7 @@ export async function generateMilestoneSteps(apiKey, { subject, deliverables, as
       `Here is the assignment brief, for context.`,
       additionalContext
     ),
-    brief, rubric
+    brief, rubric, null, supporting
   );
 
   const result = await callClaude(apiKey, { system: STEPS_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(StepsSchema) });
@@ -324,7 +347,7 @@ export async function generateMilestoneSteps(apiKey, { subject, deliverables, as
 
 // Checks a draft or final document against the brief, rubric and already-identified deliverables
 // and criteria. submission is { bytes: ArrayBuffer, contentType } — the student's own document.
-export async function checkSubmission(apiKey, { subject, deliverables, assessmentCriteria, submission, brief, rubric, additionalContext }) {
+export async function checkSubmission(apiKey, { subject, deliverables, assessmentCriteria, submission, brief, rubric, additionalContext, supporting }) {
   const deliverableLines = (deliverables || []).map((d) => `- ${d.title} (${d.format})`).join('\n') || '(none recorded)';
   const criteriaLines = (assessmentCriteria || []).map((c) => `- ${c.criterion}${c.weight ? ' (' + c.weight + ')' : ''}`).join('\n') || '(none separately identified)';
 
@@ -337,7 +360,8 @@ export async function checkSubmission(apiKey, { subject, deliverables, assessmen
       additionalContext
     ),
     brief, rubric,
-    { label: 'Here is the student’s draft or final document to check.', file: submission }
+    { label: 'Here is the student’s draft or final document to check.', file: submission },
+    supporting
   );
 
   const result = await callClaude(apiKey, { system: FEEDBACK_SYSTEM_PROMPT, content, format: jsonSchemaOutputFormat(FeedbackSchema) });

@@ -239,7 +239,7 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
 (function () {
   'use strict';
 
-  var APP_VERSION = '4'; // bump this by hand whenever a deployed change is worth being able to spot
+  var APP_VERSION = '5'; // bump this by hand whenever a deployed change is worth being able to spot
                            // at a glance — shown next to the title on the dashboard.
 
   // A toggle, not a forced site-wide change — not everyone who opens this link is dyslexic, so
@@ -269,6 +269,8 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
   var MAX_FILE_BYTES = 8 * 1024 * 1024; // mirrors functions/api/projects/index.js — checked here
                                           // too so an oversized file never starts uploading at all
   var MAX_CONTEXT_CHARS = 4000; // mirrors MAX_CONTEXT in functions/api/projects/[id]/index.js
+  var MAX_SUPPORTING_FILES = 5; // mirrors MAX_SUPPORTING_FILES in functions/api/projects/index.js
+  var SUPPORTING_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']; // mirrors SUPPORTING_TYPES there too
   var app = document.getElementById('app');
   var state = {
     view: 'dashboard', projects: [], detail: null, loading: false, formError: null, saving: false,
@@ -561,6 +563,8 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
         '<input type="file" id="f-brief" name="brief" accept="application/pdf" required>' +
         '<label for="f-rubric">Marking rubric (PDF, not required)<span class="hint">Only if it is a separate file from the brief.</span></label>' +
         '<input type="file" id="f-rubric" name="rubric" accept="application/pdf">' +
+        '<label for="f-supporting">Supporting documents (not required)<span class="hint">Anything else that helps — lecture notes, a photo of a whiteboard or handwritten notes, earlier feedback. PDFs or images, up to ' + MAX_SUPPORTING_FILES + ' files, 8MB each.</span></label>' +
+        '<input type="file" id="f-supporting" name="supporting" accept="application/pdf,image/jpeg,image/png,image/gif,image/webp" multiple>' +
         '<div class="form-actions">' +
           '<button type="submit" class="btn btn-accent" id="submitBtn">Create project and read the brief</button>' +
         '</div>' +
@@ -605,6 +609,13 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
     var rubric = form.rubric.files[0];
     if (rubric && rubric.type !== 'application/pdf') { showFormError('The rubric must be a PDF.'); return; }
     if (rubric && rubric.size > MAX_FILE_BYTES) { showFormError('That rubric is larger than 8MB — try a smaller file.'); return; }
+    var supportingFiles = Array.prototype.slice.call(form.supporting.files);
+    if (supportingFiles.length > MAX_SUPPORTING_FILES) { showFormError('Choose up to ' + MAX_SUPPORTING_FILES + ' supporting files.'); return; }
+    for (var i = 0; i < supportingFiles.length; i++) {
+      var sf = supportingFiles[i];
+      if (SUPPORTING_TYPES.indexOf(sf.type) === -1) { showFormError('"' + sf.name + '" is not a PDF or a supported image type.'); return; }
+      if (sf.size > MAX_FILE_BYTES) { showFormError('"' + sf.name + '" is larger than 8MB — try a smaller file.'); return; }
+    }
     var startDate = form.start_date.value, endDate = form.end_date.value;
     if (startDate && endDate && endDate <= startDate) { showFormError('The deadline needs to be after the start date.'); return; }
 
@@ -780,7 +791,7 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
 
   // ---- Project settings ----
 
-  var FILE_PURPOSE_LABEL = { brief: 'Assignment brief', rubric: 'Marking rubric', submission: 'Draft or final document' };
+  var FILE_PURPOSE_LABEL = { brief: 'Assignment brief', rubric: 'Marking rubric', submission: 'Draft or final document', supporting: 'Supporting document' };
 
   function renderSettings() {
     var d = state.detail;

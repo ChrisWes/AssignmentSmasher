@@ -2,6 +2,7 @@ import { ownerEmail, unauthorized } from '../../../lib/auth.js';
 import { analyzeBrief } from '../../../lib/claude.js';
 import { computeSchedule } from '../../../lib/dates.js';
 import { recordUsageStatement } from '../../../lib/usage.js';
+import { readSupportingFiles } from '../../../lib/files.js';
 
 function json(data, status) {
   return new Response(JSON.stringify(data), {
@@ -40,9 +41,11 @@ export async function onRequestPost({ request, env, params }) {
       if (rubricObj) rubric = { bytes: await rubricObj.arrayBuffer(), contentType: rubricFile.content_type };
     }
 
+    const supporting = await readSupportingFiles(env, files);
+
     const { outline, usage } = await analyzeBrief(env.ANTHROPIC_API_KEY, {
       subject: row.subject, startDate: row.start_date, endDate: row.end_date, brief, rubric,
-      additionalContext: row.additional_context
+      additionalContext: row.additional_context, supporting
     });
 
     // A fresh read replaces the whole plan, including every milestone — otherwise a milestone

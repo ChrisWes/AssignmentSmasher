@@ -5,6 +5,9 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8MB — generous for a text brief, ti
                                           // well under Claude's combined-request document limit
 const MAX_TITLE = 200;
 const MAX_SUBJECT = 200;
+const MAX_SUPPORTING_FILES = 5; // a sensible cap — more than this starts costing real tokens
+                                  // and getting hard for the plan to actually make use of
+const SUPPORTING_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function json(data, status) {
@@ -69,6 +72,7 @@ export async function onRequestPost({ request, env }) {
   const endDate = String(form.get('end_date') || '').trim();
   const brief = form.get('brief');
   const rubric = form.get('rubric'); // optional
+  const supportingFiles = form.getAll('supporting').filter((f) => f instanceof File && f.size > 0); // optional, any number up to the cap below
 
   if (!title) return badRequest('Give the project a title.');
   if (title.length > MAX_TITLE) return badRequest('That title is too long.');
@@ -82,13 +86,19 @@ export async function onRequestPost({ request, env }) {
     if (rubric.type !== 'application/pdf') return badRequest('The rubric must be a PDF.');
     if (rubric.size > MAX_FILE_BYTES) return badRequest('That rubric is larger than 8MB — try a smaller file.');
   }
+  if (supportingFiles.length > MAX_SUPPORTING_FILES) return badRequest('Up to ' + MAX_SUPPORTING_FILES + ' supporting files at a time.');
+  for (const f of supportingFiles) {
+    if (!SUPPORTING_TYPES.has(f.type)) return badRequest('"' + f.name + '" is not a PDF or a supported image type (JPG, PNG, GIF or WEBP).');
+    if (f.size > MAX_FILE_BYTES) return badRequest('"' + f.name + '" is larger than 8MB — try a smaller file.');
+  }
 
   const id = crypto.randomUUID();
   const now = Date.now();
 
   async function storeFile(file, purpose) {
     const fileId = crypto.randomUUID();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || `${purpose}.pdf`;
+    const fallbackExt = file.type === 'application/pdf' ? 'pdf' : (file.type.split('/')[1] || 'bin');
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || `${purpose}.${fallbackExt}`;
     const key = `projects/${id}/${purpose}-${fileId}-${safeName}`;
     await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
     return env.DB.prepare(
@@ -105,6 +115,9 @@ export async function onRequestPost({ request, env }) {
   ];
   if (rubric && rubric instanceof File && rubric.size > 0) {
     stmts.push(await storeFile(rubric, 'rubric'));
+  }
+  for (const f of supportingFiles) {
+    stmts.push(await storeFile(f, 'supporting'));
   }
 
   await env.DB.batch(stmts);

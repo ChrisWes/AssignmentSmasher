@@ -128,7 +128,17 @@ to Claude alongside the brief on every later call (building the plan, generating
 checking a draft), framed as the student's own note rather than part of the brief itself, so the brief
 and rubric still win if the two ever disagree.
 
-Not yet built: an "I'm stuck" helper for when a student is partway through a step and needs a nudge.
+Supporting documents: when creating a project, up to 5 extra files (PDFs or images — JPG, PNG, GIF or
+WEBP, 8MB each) can be attached alongside the brief, for anything else that gives Claude more context —
+lecture notes, a photo of a whiteboard or handwritten notes, earlier feedback. An image is sent to
+Claude as an image, not squeezed through a PDF. Like the additional-context text box, these are passed
+on every later call (building the plan, generating a milestone's steps, checking a draft), clearly
+labelled as the student's own extra material rather than the brief or rubric. Shown on the project
+settings page alongside the brief and rubric. Can only be added when the project is first created, not
+afterwards — a deliberate scoping choice, not an oversight.
+
+Not yet built: an "I'm stuck" helper for when a student is partway through a step and needs a nudge;
+adding or removing supporting documents after a project has already been created.
 
 ## Local development
 
