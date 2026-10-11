@@ -239,7 +239,7 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
 (function () {
   'use strict';
 
-  var APP_VERSION = '2'; // bump this by hand whenever a deployed change is worth being able to spot
+  var APP_VERSION = '3'; // bump this by hand whenever a deployed change is worth being able to spot
                            // at a glance — shown next to the title on the dashboard.
 
   // A toggle, not a forced site-wide change — not everyone who opens this link is dyslexic, so
@@ -725,8 +725,9 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
       '<h2 class="section-title">How it is marked</h2><ul class="plain">' + criteria + '</ul>' +
       '<h2 class="section-title">Check these with your tutor</h2><ul class="plain ambiguity-list">' + ambiguities + '</ul>' +
       '<h2 class="section-title">Milestones</h2><p class="hint" style="margin:-4px 0 14px;">The stages of the work, from now to the deadline.</p>' + milestones +
+      '<p class="hint" id="reanalyzeWarning" style="display:none; color:var(--warn); margin:14px 0 0;"></p>' +
       '<div class="form-actions"><button type="button" class="btn btn-accent" id="saveBtn">Save changes</button>' +
-      '<button type="button" class="btn" id="reanalyzeBtn">Read the brief again</button></div>' +
+      '<span id="reanalyzeArea"><button type="button" class="btn" id="reanalyzeBtn">Read the brief again</button></span></div>' +
       renderFeedbackSection(d);
 
     wireBack();
@@ -735,10 +736,46 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
       inp.addEventListener('input', updateScheduleSummary);
     });
     document.getElementById('saveBtn').addEventListener('click', function () { saveOutlineEdits(d.id); });
-    document.getElementById('reanalyzeBtn').addEventListener('click', function () { startAnalyzing(d.id); });
+    wireReanalyzeBtn(d);
     wireMilestoneDoneControls(d.id);
     wireStepsControls(d.id);
     wireFeedbackControls(d.id);
+  }
+
+  // Re-reading the brief replaces the whole plan from scratch — every milestone, the deliverables,
+  // the tutor-check list — not just the parts that changed. The server carries a milestone's done
+  // flag and steps across when its title comes back unchanged (see analyze.js), but anything else
+  // is lost for good, so this asks first whenever there's real progress at stake. Patches the
+  // button area in place rather than a full re-render, so nothing else on the form is disturbed.
+  function wireReanalyzeBtn(d) {
+    var btn = document.getElementById('reanalyzeBtn');
+    if (btn) btn.addEventListener('click', function () { handleReanalyzeClick(d); });
+  }
+
+  function handleReanalyzeClick(d) {
+    var o = d.outline;
+    var doneCount = o.milestones.filter(function (m) { return m.done; }).length;
+    var stepsCount = o.milestones.filter(function (m) { return m.steps && m.steps.length; }).length;
+    if (!doneCount && !stepsCount) { startAnalyzing(d.id); return; }
+
+    var bits = [];
+    if (doneCount) bits.push(doneCount + ' milestone' + (doneCount === 1 ? '' : 's') + ' ticked done');
+    if (stepsCount) bits.push(stepsCount + ' with a saved step checklist');
+
+    var warning = document.getElementById('reanalyzeWarning');
+    warning.textContent = 'Reading the brief again replaces the whole plan — deliverables, the tutor-check list, every milestone. ' +
+      'Right now you have ' + bits.join(' and ') + '. A milestone only keeps its progress if its title comes back unchanged — anything else is lost for good.';
+    warning.style.display = 'block';
+
+    document.getElementById('reanalyzeArea').innerHTML =
+      '<button type="button" class="btn btn-warn-outline" id="confirmReanalyzeBtn">Read the brief again anyway</button>' +
+      '<button type="button" class="btn btn-quiet" id="cancelReanalyzeBtn">Cancel</button>';
+    document.getElementById('confirmReanalyzeBtn').addEventListener('click', function () { startAnalyzing(d.id); });
+    document.getElementById('cancelReanalyzeBtn').addEventListener('click', function () {
+      warning.style.display = 'none';
+      document.getElementById('reanalyzeArea').innerHTML = '<button type="button" class="btn" id="reanalyzeBtn">Read the brief again</button>';
+      wireReanalyzeBtn(d);
+    });
   }
 
   // ---- Project settings ----
@@ -769,7 +806,7 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
         '<h2 class="section-title">Files</h2>' + filesList +
       '</div>' +
       '<form class="card" id="contextForm" novalidate>' +
-        '<label for="f-context">Additional context<span class="hint">Add anything new that has come up since the brief was read — answers to questions it left open, notes from your tutor, or things to focus on. Claude reads this alongside the brief the next time it makes steps or checks your work.</span></label>' +
+        '<label for="f-context">Additional context<span class="hint">Add anything new that has come up since the brief was read — answers to questions it left open, notes from your tutor, or things to focus on. Saving this is enough on its own: Claude reads it alongside the brief the next time it makes steps or checks your work. It only reaches the plan itself (the deliverables, the tutor-check list, the milestones) if you also read the brief again on the project page — and that replaces the whole plan, so only do that if you actually want it redone.</span></label>' +
         '<textarea id="f-context" rows="8" maxlength="' + MAX_CONTEXT_CHARS + '" placeholder="For example: my tutor said to focus more on primary sources in the research section.">' + esc(d.additional_context || '') + '</textarea>' +
         '<div class="form-actions"><button type="submit" class="btn btn-accent" id="saveContextBtn">Save</button></div>' +
       '</form>';

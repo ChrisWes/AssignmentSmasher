@@ -45,6 +45,26 @@ export async function onRequestPost({ request, env, params }) {
       additionalContext: row.additional_context
     });
 
+    // A fresh read replaces the whole plan, including every milestone — otherwise a milestone
+    // ticked done, or one with a generated step checklist, would silently vanish the moment the
+    // student re-reads the brief after adding context. Where the new plan has a milestone with the
+    // exact same title as before (the common case — re-reading after adding context rarely changes
+    // the milestone structure itself), carry its done flag and steps across. A milestone whose title
+    // changed, or that's new, starts fresh, same as before.
+    const priorOutline = row.outline_json ? JSON.parse(row.outline_json) : null;
+    const priorByTitle = new Map();
+    (priorOutline && Array.isArray(priorOutline.milestones) ? priorOutline.milestones : []).forEach((m) => {
+      if (m && typeof m.title === 'string') priorByTitle.set(m.title.trim().toLowerCase(), m);
+    });
+    outline.milestones = outline.milestones.map((m) => {
+      const prior = priorByTitle.get(m.title.trim().toLowerCase());
+      if (!prior) return m;
+      const carried = Object.assign({}, m);
+      if (typeof prior.done === 'boolean') carried.done = prior.done;
+      if (Array.isArray(prior.steps)) carried.steps = prior.steps;
+      return carried;
+    });
+
     const now = Date.now();
     await env.DB.batch([
       env.DB.prepare('UPDATE projects SET status = ?, outline_json = ?, error = NULL, updated_at = ? WHERE id = ?')
