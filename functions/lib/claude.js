@@ -48,7 +48,7 @@ Do this:
 1. List the concrete deliverables: what has to be handed in and in what form (word count, file type, duration, number of slides, and so on), read precisely from the brief.
 2. List the assessment criteria. Use the rubric if one is given; otherwise use your best reading of the brief. Give the weighting only if the source states it — never guess a number.
 3. Flag anything the brief leaves unclear or unstated, so the student can check it with their tutor instead of guessing. Say so plainly if nothing is unclear; do not invent an ambiguity to fill the list.
-4. Break the work into milestones running from the start date to the deadline. Each milestone is a stage of the process — for example understanding the brief, research, planning the structure, a first draft, getting feedback, revising, and a final check against the criteria before submission — never a slice of the finished document. A milestone that amounts to "write the report" or "do the assignment" is not a plan, it is the whole task restated; break it down further instead.
+4. Break the work into milestones running from the start date to the deadline. Each milestone is a stage of the process — for example understanding the brief, research, planning the structure, a first draft, getting feedback, revising, and a final check against the criteria before submission — never a slice of the finished document. A milestone that amounts to "write the report" or "do the assignment" is not a plan, it is the whole task restated; break it down further instead. Use between 3 and 12 milestones in total, however complex the brief is — if it has many small parts, group closely related ones into a single milestone instead of listing each separately. A long list of milestones is its own problem: it is harder to hold in your head and harder to feel like you are making progress through.
 5. Give each milestone a short, encouraging one-line goal and your best estimate of the focused days of work it needs. Be realistic about a student juggling several modules and a life outside them — do not assume full days of uninterrupted work.
 
 If a rubric was provided, check before you finish that the milestones between them touch on every criterion in it.`;
@@ -172,6 +172,12 @@ function strictJsonSchema(jsonSchema) {
   return strict;
 }
 
+// Thrown when Claude's response doesn't fit the schema — a one-off generation quirk (counted
+// against the model's own stated bounds, e.g. too many milestones), not a real failure. Its own
+// class so callClaude below can tell it apart from a genuine API error and retry once instead of
+// giving up, and so the message shown to the student can stay plain rather than a raw schema dump.
+class StructuredOutputError extends Error {}
+
 // Equivalent to zodOutputFormat(zodObject) from @anthropic-ai/sdk/helpers/zod.
 function jsonSchemaOutputFormat(zodObject) {
   const schema = strictJsonSchema(JSON.parse(JSON.stringify(z.toJSONSchema(zodObject, { reused: 'ref' }))));
@@ -181,11 +187,11 @@ function jsonSchemaOutputFormat(zodObject) {
     parse(content) {
       let parsed;
       try { parsed = JSON.parse(content); }
-      catch (e) { throw new Error('Failed to parse structured output as JSON: ' + e.message); }
+      catch (e) { throw new StructuredOutputError('Failed to parse structured output as JSON: ' + e.message); }
       const result = zodObject.safeParse(parsed);
       if (!result.success) {
         const issues = result.error.issues.slice(0, 5).map((i) => '  - ' + i.path.join('.') + ': ' + i.message).join('\n');
-        throw new Error('Failed to parse structured output:\n' + issues);
+        throw new StructuredOutputError('Failed to parse structured output:\n' + issues);
       }
       return result.data;
     }
@@ -236,18 +242,27 @@ function documentContent(leadText, brief, rubric, extra) {
 async function callClaude(apiKey, { system, content, format }) {
   const client = new Anthropic({ apiKey });
   let message;
-  try {
-    const stream = client.messages.stream({
-      model: MODEL,
-      max_tokens: 16000,
-      system,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'high', format },
-      messages: [{ role: 'user', content }]
-    });
-    message = await stream.finalMessage();
-  } catch (err) {
-    throw new Error(friendlyApiError(err));
+  // A StructuredOutputError (the response didn't fit the schema) is worth one automatic retry —
+  // it's usually a one-off generation quirk, and retrying the exact same request is cheaper than
+  // making the student retry by hand after reading an error that won't mean anything to them. Any
+  // other kind of failure (auth, rate limit, refusal mid-stream, and so on) isn't worth retrying
+  // and fails straight away.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const stream = client.messages.stream({
+        model: MODEL,
+        max_tokens: 16000,
+        system,
+        thinking: { type: 'adaptive' },
+        output_config: { effort: 'high', format },
+        messages: [{ role: 'user', content }]
+      });
+      message = await stream.finalMessage();
+      break;
+    } catch (err) {
+      if (err instanceof StructuredOutputError && attempt < 2) continue;
+      throw new Error(friendlyApiError(err));
+    }
   }
 
   if (message.stop_reason === 'refusal') {
@@ -336,6 +351,9 @@ function toUtc(isoDate) {
 // Turns the SDK's typed exceptions into something worth showing on screen. Most specific first —
 // see shared/error-codes.md in the claude-api skill for why a single broad catch loses this.
 function friendlyApiError(err) {
+  if (err instanceof StructuredOutputError) {
+    return 'Claude gave back an answer in an unexpected shape, which happens sometimes — not a real problem, just bad luck this time. Try again.';
+  }
   if (err instanceof Anthropic.AuthenticationError) {
     return 'Claude API key is missing or invalid. Whoever manages this site needs to check the ANTHROPIC_API_KEY setting in Cloudflare.';
   }
