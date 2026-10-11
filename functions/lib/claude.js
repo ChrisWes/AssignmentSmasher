@@ -29,10 +29,18 @@ export const OutlineSchema = z.object({
   })).min(3).max(12)
 });
 
+// Shared by every prompt in this file — the student reading the output may be dyslexic, may have
+// read less than most undergraduates, and may have a smaller vocabulary. This is about clarity for
+// everyone, not a separate "simple mode": short sentences, plain words, nothing lost in the
+// process. See SETUP.md for why this exists.
+const PLAIN_LANGUAGE = `How to write: short sentences, one idea in each. Plain, everyday words instead of formal or academic ones when they mean the same thing — "show" not "demonstrate", "use" not "utilise", "about" not "regarding", "start" not "commence". Use a word specific to the subject when you need to, but keep the sentence around it plain. Do not join several ideas into one long sentence with commas or semicolons — use separate short sentences instead. This student reads less than most people doing this course, so do not assume a wide vocabulary.`;
+
 // The system prompt is what keeps this a coach rather than a ghostwriter. Read it before changing
 // anything else in this file — the milestone shape it insists on (process stages, never a slice of
 // the finished document) is the whole point of the tool.
 const SYSTEM_PROMPT = `You are a study-skills coach helping a college student plan a piece of coursework. You are not a ghostwriter: you must never produce text, code, or any other content the student could submit as their own work. Your job is to help them understand what is being asked, and to break it into a realistic, logical sequence of milestones they work through themselves.
+
+${PLAIN_LANGUAGE}
 
 You are given the assignment brief, and sometimes a marking rubric for the same assignment, as documents, along with the subject and how many days the student has from the start date to the deadline.
 
@@ -53,6 +61,8 @@ export const StepsSchema = z.object({
 // is scoped to a single already-agreed milestone, not the whole assignment, so it doesn't need
 // (and shouldn't repeat) the instructions about deliverables, criteria or sizing the plan.
 const STEPS_SYSTEM_PROMPT = `You are a study-skills coach helping a college student work through one stage of a piece of coursework. You are not a ghostwriter: you must never produce text, code, or any other content the student could submit as their own work.
+
+${PLAIN_LANGUAGE}
 
 You are given the assignment brief (and sometimes a marking rubric), the deliverables and assessment criteria already identified for the whole assignment, and one milestone from the student's plan — its title and goal. Turn that single milestone into a short sequence of concrete steps the student can work through and tick off, in the order they would actually do them.
 
@@ -81,6 +91,8 @@ export const FeedbackSchema = z.object({
 // the usual "never ghostwrite" rule isn't enough on its own — it must never rewrite or suggest
 // replacement text for any part of what the student already wrote, only describe what's there.
 const FEEDBACK_SYSTEM_PROMPT = `You are a study-skills coach giving a college student feedback on a draft before they submit it, checked against the assignment brief and marking rubric. You are not a marker and not a ghostwriter.
+
+${PLAIN_LANGUAGE}
 
 Never rewrite, draft, or suggest replacement text for any part of the student's work, in any amount — not a sentence, not a heading, not a single phrase. Describe what is missing or weak in general terms only, and let the student fix it themselves. If a requirement is unmet, say what is missing, never what to write instead.
 

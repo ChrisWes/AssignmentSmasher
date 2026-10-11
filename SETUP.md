@@ -101,6 +101,23 @@ ahead/behind badge on each project row, without needing to open it. The admin sc
 Claude calls each project (and the account as a whole) has made and a rough estimated cost — Opus 5
 rates, no prompt-cache discount applied, so the real bill will usually run a little lower than this.
 
+An "Easier reading mode" toggle, remembered per device, for dyslexic students — based on the British
+Dyslexia Association guidance as described in
+[Smashing Magazine's dyslexia-friendly mode article](https://www.smashingmagazine.com/2021/11/dyslexia-friendly-mode-website/):
+wider letter- and word-spacing, double line-height, a heavier font weight, no ligatures, and more
+space between paragraphs. It's a toggle rather than a forced site-wide change, since not everyone who
+opens the site is dyslexic. The colour palette was reworked to a warmer, softer scheme — still
+checked against WCAG AA contrast (4.5:1 for text, 3:1 for large text and UI components), but without
+the very high-contrast extremes that can themselves cause glare for some dyslexic readers. All-caps
+badges were switched to plain mixed case (capitals lose their word-shape, which slows reading), the
+heading font changed from a condensed to a regular weight, and lists use alternating row shading so
+it's easier to tell where one item ends and the next begins. Every piece of text the student sees —
+both the fixed interface copy and everything Claude generates (the plan, the milestone steps, the
+draft feedback) — was rewritten or prompted for a plainer reading level: short sentences, one idea
+each, everyday words over formal ones. This hasn't been checked with an actual dyslexic reader yet —
+the Smashing Magazine article itself stresses testing with real users, so it's worth getting Dan's
+feedback on whether the toggle's intensity feels right before treating this as finished.
+
 Not yet built: an "I'm stuck" helper for when a student is partway through a step and needs a nudge.
 
 ## Local development
