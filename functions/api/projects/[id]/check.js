@@ -51,7 +51,8 @@ export async function onRequestPost({ request, env, params }) {
       subject: row.subject,
       deliverables: outline.deliverables,
       assessmentCriteria: outline.assessment_criteria,
-      submission, brief, rubric
+      submission, brief, rubric,
+      additionalContext: row.additional_context
     });
 
     const now = Date.now();

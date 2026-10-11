@@ -41,7 +41,8 @@ export async function onRequestPost({ request, env, params }) {
     }
 
     const { outline, usage } = await analyzeBrief(env.ANTHROPIC_API_KEY, {
-      subject: row.subject, startDate: row.start_date, endDate: row.end_date, brief, rubric
+      subject: row.subject, startDate: row.start_date, endDate: row.end_date, brief, rubric,
+      additionalContext: row.additional_context
     });
 
     const now = Date.now();

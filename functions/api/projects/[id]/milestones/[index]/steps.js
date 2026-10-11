@@ -49,7 +49,8 @@ export async function onRequestPost({ request, env, params }) {
       deliverables: outline.deliverables,
       assessmentCriteria: outline.assessment_criteria,
       milestone: { title: milestone.title, goal: milestone.goal },
-      brief, rubric
+      brief, rubric,
+      additionalContext: row.additional_context
     });
 
     // Each step is tickable on its own (see milestones/[index]/steps/[stepIndex]/done.js) — stored

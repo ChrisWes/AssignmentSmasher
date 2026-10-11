@@ -3,6 +3,7 @@ import { computeSchedule } from '../../../lib/dates.js';
 
 const MAX_TITLE = 200;
 const MAX_SUBJECT = 200;
+const MAX_CONTEXT = 4000;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function json(data, status) {
@@ -27,6 +28,7 @@ function present(row, files) {
     id: row.id, title: row.title, subject: row.subject,
     start_date: row.start_date, end_date: row.end_date,
     status: row.status, error: row.error || null,
+    additional_context: row.additional_context || '',
     created_at: row.created_at, updated_at: row.updated_at,
     files: files.map((f) => ({ id: f.id, purpose: f.purpose, filename: f.filename })),
     outline: null,
@@ -83,12 +85,14 @@ export async function onRequestPatch({ request, env, params }) {
   const subject = 'subject' in body ? String(body.subject || '').trim() : row.subject;
   const startDate = 'start_date' in body ? String(body.start_date || '').trim() : row.start_date;
   const endDate = 'end_date' in body ? String(body.end_date || '').trim() : row.end_date;
+  const additionalContext = 'additional_context' in body ? String(body.additional_context || '').trim() : (row.additional_context || '');
 
   if (!title) return badRequest('Give the project a title.');
   if (title.length > MAX_TITLE) return badRequest('That title is too long.');
   if (subject.length > MAX_SUBJECT) return badRequest('That subject is too long.');
   if (!DATE_RE.test(startDate) || !DATE_RE.test(endDate)) return badRequest('Start and end dates must be real dates.');
   if (endDate <= startDate) return badRequest('The deadline needs to be after the start date.');
+  if (additionalContext.length > MAX_CONTEXT) return badRequest('That is too much extra context — keep it under ' + MAX_CONTEXT + ' characters.');
 
   let outlineJson = row.outline_json;
   if ('outline' in body) {
@@ -124,8 +128,8 @@ export async function onRequestPatch({ request, env, params }) {
 
   const now = Date.now();
   await env.DB.prepare(
-    'UPDATE projects SET title = ?, subject = ?, start_date = ?, end_date = ?, outline_json = ?, updated_at = ? WHERE id = ? AND owner_email = ?'
-  ).bind(title, subject, startDate, endDate, outlineJson, now, row.id, owner).run();
+    'UPDATE projects SET title = ?, subject = ?, start_date = ?, end_date = ?, outline_json = ?, additional_context = ?, updated_at = ? WHERE id = ? AND owner_email = ?'
+  ).bind(title, subject, startDate, endDate, outlineJson, additionalContext, now, row.id, owner).run();
 
   const updated = await loadProject(env, owner, row.id);
   const files = await env.DB.prepare('SELECT id, purpose, filename FROM files WHERE project_id = ?').bind(row.id).all();

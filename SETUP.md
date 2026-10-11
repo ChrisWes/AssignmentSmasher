@@ -17,8 +17,9 @@ tab, paste in the contents of `db/schema.sql`, and run it.
 If the database already existed before 2026-10-09 (the "check your draft" feature), it won't have
 the columns that feature needs yet — paste the contents of `db/migrations/001_feedback.sql` into the
 same Console and run it once. Likewise if it existed before the admin usage summary, run
-`db/migrations/002_usage.sql` too. A brand new database from `db/schema.sql` already has every
-column either migration adds; skip both in that case.
+`db/migrations/002_usage.sql` too, and if it existed before the project settings page's "Additional
+context" box, run `db/migrations/003_additional_context.sql` too. A brand new database from
+`db/schema.sql` already has every column each migration adds; skip any that don't apply.
 
 ## 3. Create the R2 bucket
 
@@ -117,6 +118,15 @@ draft feedback) — was rewritten or prompted for a plainer reading level: short
 each, everyday words over formal ones. This hasn't been checked with an actual dyslexic reader yet —
 the Smashing Magazine article itself stresses testing with real users, so it's worth getting Dan's
 feedback on whether the toggle's intensity feels right before treating this as finished.
+
+A project settings page, reachable from "Project settings" on the project page itself (available in
+every project status, not just once the plan is ready). It shows the project's details — title,
+subject, dates, status and the uploaded files — and an "Additional context" box: free text the student
+can add at any point, for things that come up after the brief was first read — an answer to a question
+the brief left open, a note from a tutor, something to focus on. It's saved onto the project and passed
+to Claude alongside the brief on every later call (building the plan, generating a milestone's steps,
+checking a draft), framed as the student's own note rather than part of the brief itself, so the brief
+and rubric still win if the two ever disagree.
 
 Not yet built: an "I'm stuck" helper for when a student is partway through a step and needs a nudge.
 

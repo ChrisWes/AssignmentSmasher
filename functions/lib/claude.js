@@ -205,6 +205,17 @@ function arrayBufferToBase64(buffer) {
 // Builds the lead text block plus the brief (and optional rubric, and optional one further
 // labelled document) document blocks — the part every call to Claude in this file shares. brief,
 // rubric and extra.file are { bytes: ArrayBuffer, contentType } (rubric and extra may be omitted).
+// Folds in the free-text "additional context" from the project settings page — answers to
+// questions the brief left open, a tutor's notes, things to focus on. It's the student's own
+// account of their situation, not part of the brief itself, so it's framed as a separate note
+// rather than silently merged into the lead text, and the brief/rubric still set the actual
+// requirements where the two would conflict.
+function withAdditionalContext(leadText, additionalContext) {
+  const trimmed = (additionalContext || '').trim();
+  if (!trimmed) return leadText;
+  return leadText + `\n\nThe student has also added this extra context on the project settings page, since the brief was first read — things like answers to questions the brief left open, a tutor's notes, or what to focus on. Take it into account, but the brief and rubric still set the actual requirements if the two ever disagree.\n\n"""\n${trimmed}\n"""`;
+}
+
 function documentContent(leadText, brief, rubric, extra) {
   const content = [
     { type: 'text', text: leadText },
@@ -254,14 +265,19 @@ async function callClaude(apiKey, { system, content, format }) {
 }
 
 // brief and rubric are { bytes: ArrayBuffer, contentType: string } | null (rubric only).
-export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief, rubric }) {
+// additionalContext is the free text from the project settings page, if any (see
+// withAdditionalContext above).
+export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief, rubric, additionalContext }) {
   const totalDays = Math.max(
     Math.round((toUtc(endDate) - toUtc(startDate)) / 86400000),
     1
   );
 
   const content = documentContent(
-    `Subject: ${subject || '(not given)'}\nStart date: ${startDate}\nDeadline: ${endDate}\nDays available: ${totalDays}\n\nHere is the assignment brief.`,
+    withAdditionalContext(
+      `Subject: ${subject || '(not given)'}\nStart date: ${startDate}\nDeadline: ${endDate}\nDays available: ${totalDays}\n\nHere is the assignment brief.`,
+      additionalContext
+    ),
     brief, rubric
   );
 
@@ -271,16 +287,19 @@ export async function analyzeBrief(apiKey, { subject, startDate, endDate, brief,
 
 // Expands one already-agreed milestone into a short, concrete checklist. deliverables and
 // assessmentCriteria are the whole assignment's, passed for context; milestone is { title, goal }.
-export async function generateMilestoneSteps(apiKey, { subject, deliverables, assessmentCriteria, milestone, brief, rubric }) {
+export async function generateMilestoneSteps(apiKey, { subject, deliverables, assessmentCriteria, milestone, brief, rubric, additionalContext }) {
   const deliverableLines = (deliverables || []).map((d) => `- ${d.title} (${d.format})`).join('\n') || '(none recorded)';
   const criteriaLines = (assessmentCriteria || []).map((c) => `- ${c.criterion}${c.weight ? ' (' + c.weight + ')' : ''}`).join('\n') || '(none separately identified)';
 
   const content = documentContent(
-    `Subject: ${subject || '(not given)'}\n\n` +
-    `Deliverables for the whole assignment:\n${deliverableLines}\n\n` +
-    `Assessment criteria for the whole assignment:\n${criteriaLines}\n\n` +
-    `The milestone to turn into steps:\nTitle: ${milestone.title}\nGoal: ${milestone.goal}\n\n` +
-    `Here is the assignment brief, for context.`,
+    withAdditionalContext(
+      `Subject: ${subject || '(not given)'}\n\n` +
+      `Deliverables for the whole assignment:\n${deliverableLines}\n\n` +
+      `Assessment criteria for the whole assignment:\n${criteriaLines}\n\n` +
+      `The milestone to turn into steps:\nTitle: ${milestone.title}\nGoal: ${milestone.goal}\n\n` +
+      `Here is the assignment brief, for context.`,
+      additionalContext
+    ),
     brief, rubric
   );
 
@@ -290,15 +309,18 @@ export async function generateMilestoneSteps(apiKey, { subject, deliverables, as
 
 // Checks a draft or final document against the brief, rubric and already-identified deliverables
 // and criteria. submission is { bytes: ArrayBuffer, contentType } — the student's own document.
-export async function checkSubmission(apiKey, { subject, deliverables, assessmentCriteria, submission, brief, rubric }) {
+export async function checkSubmission(apiKey, { subject, deliverables, assessmentCriteria, submission, brief, rubric, additionalContext }) {
   const deliverableLines = (deliverables || []).map((d) => `- ${d.title} (${d.format})`).join('\n') || '(none recorded)';
   const criteriaLines = (assessmentCriteria || []).map((c) => `- ${c.criterion}${c.weight ? ' (' + c.weight + ')' : ''}`).join('\n') || '(none separately identified)';
 
   const content = documentContent(
-    `Subject: ${subject || '(not given)'}\n\n` +
-    `Deliverables for this assignment:\n${deliverableLines}\n\n` +
-    `Assessment criteria:\n${criteriaLines}\n\n` +
-    `Here is the assignment brief.`,
+    withAdditionalContext(
+      `Subject: ${subject || '(not given)'}\n\n` +
+      `Deliverables for this assignment:\n${deliverableLines}\n\n` +
+      `Assessment criteria:\n${criteriaLines}\n\n` +
+      `Here is the assignment brief.`,
+      additionalContext
+    ),
     brief, rubric,
     { label: 'Here is the student’s draft or final document to check.', file: submission }
   );

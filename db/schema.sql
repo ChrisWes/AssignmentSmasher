@@ -9,6 +9,9 @@
    projects.ai_calls               count of Claude calls this project has made (analysis, steps, checks)
    projects.ai_input_tokens        summed input tokens across those calls -- see functions/lib/usage.js
    projects.ai_output_tokens       summed output tokens across those calls
+   projects.additional_context     free text the student adds on the project settings page -- answers
+                                    to questions raised by the brief, things to focus on, tutor notes --
+                                    passed to Claude alongside the brief on every later call
    files.purpose                   brief | rubric | submission
 */
 
@@ -28,6 +31,7 @@ CREATE TABLE IF NOT EXISTS projects (
   ai_calls INTEGER NOT NULL DEFAULT 0,
   ai_input_tokens INTEGER NOT NULL DEFAULT 0,
   ai_output_tokens INTEGER NOT NULL DEFAULT 0,
+  additional_context TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
