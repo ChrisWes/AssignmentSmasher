@@ -239,7 +239,7 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
 (function () {
   'use strict';
 
-  var APP_VERSION = '5'; // bump this by hand whenever a deployed change is worth being able to spot
+  var APP_VERSION = '6'; // bump this by hand whenever a deployed change is worth being able to spot
                            // at a glance — shown next to the title on the dashboard.
 
   // A toggle, not a forced site-wide change — not everyone who opens this link is dyslexic, so
@@ -806,6 +806,18 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
         }).join('') + '</ul>'
       : '<p class="meta">No files uploaded yet.</p>';
 
+    var supportingCount = d.files.filter(function (f) { return f.purpose === 'supporting'; }).length;
+    var supportingRemaining = MAX_SUPPORTING_FILES - supportingCount;
+    var addSupportingHtml = supportingRemaining > 0
+      ? '<form id="addSupportingForm" style="margin-top:14px;">' +
+          '<label for="f-add-supporting">Add a supporting document<span class="hint">A document that turned up or answers a question, after the brief was first read — a photo, a PDF, a handout. ' +
+            'This is picked up automatically next time Claude makes steps or checks your work, same as the context box above — it only reaches the plan itself if you also read the brief again. ' +
+            'Up to ' + supportingRemaining + ' more file' + (supportingRemaining === 1 ? '' : 's') + ', 8MB each.</span></label>' +
+          '<input type="file" id="f-add-supporting" name="supporting" accept="application/pdf,image/jpeg,image/png,image/gif,image/webp" multiple>' +
+          '<div class="form-actions"><button type="submit" class="btn" id="addSupportingBtn">Upload</button></div>' +
+        '</form>'
+      : '<p class="hint" style="margin-top:14px;">This project already has the most supporting files allowed (' + MAX_SUPPORTING_FILES + ').</p>';
+
     app.innerHTML =
       '<header class="top"><h1>Project settings</h1>' + back + '</header>' +
       '<div class="card">' +
@@ -814,7 +826,7 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
         '<p><strong>Subject:</strong> ' + esc(d.subject || 'No subject given') + '</p>' +
         '<p><strong>Dates:</strong> ' + esc(formatDateUK(d.start_date)) + ' to ' + esc(formatDateUK(d.end_date)) + '</p>' +
         '<p><strong>Status:</strong> ' + esc(statusLabel(d.status)) + '</p>' +
-        '<h2 class="section-title">Files</h2>' + filesList +
+        '<h2 class="section-title">Files</h2>' + filesList + addSupportingHtml +
       '</div>' +
       '<form class="card" id="contextForm" novalidate>' +
         '<label for="f-context">Additional context<span class="hint">Add anything new that has come up since the brief was read — answers to questions it left open, notes from your tutor, or things to focus on. Saving this is enough on its own: Claude reads it alongside the brief the next time it makes steps or checks your work. It only reaches the plan itself (the deliverables, the tutor-check list, the milestones) if you also read the brief again on the project page — and that replaces the whole plan, so only do that if you actually want it redone.</span></label>' +
@@ -826,6 +838,11 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
     document.getElementById('contextForm').addEventListener('submit', function (e) {
       e.preventDefault();
       saveAdditionalContext(d.id);
+    });
+    var addForm = document.getElementById('addSupportingForm');
+    if (addForm) addForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      handleAddSupporting(d.id);
     });
   }
 
@@ -849,6 +866,30 @@ ul.plain li:nth-child(even) { background: var(--surface2); border-radius: 8px; }
       toast(e.message, true);
     } finally {
       btn.disabled = false; btn.textContent = 'Save';
+    }
+  }
+
+  async function handleAddSupporting(id) {
+    var input = document.getElementById('f-add-supporting');
+    var btn = document.getElementById('addSupportingBtn');
+    var files = Array.prototype.slice.call(input.files);
+    if (!files.length) { toast('Choose at least one file.', true); return; }
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      if (SUPPORTING_TYPES.indexOf(f.type) === -1) { toast('"' + f.name + '" is not a PDF or a supported image type.', true); return; }
+      if (f.size > MAX_FILE_BYTES) { toast('"' + f.name + '" is larger than 8MB — try a smaller file.', true); return; }
+    }
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    try {
+      var fd = new FormData();
+      files.forEach(function (f) { fd.append('supporting', f); });
+      var result = await api('/api/projects/' + encodeURIComponent(id) + '/supporting', { method: 'POST', body: fd });
+      state.detail = Object.assign({}, state.detail, { files: result.files });
+      toast('Added.');
+      renderSettings();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false; btn.textContent = 'Upload';
     }
   }
 

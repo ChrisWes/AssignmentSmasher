@@ -1,13 +1,9 @@
 import { ownerEmail, unauthorized } from '../../lib/auth.js';
 import { computeProgress } from '../../lib/dates.js';
+import { storeFile, MAX_FILE_BYTES, MAX_SUPPORTING_FILES, SUPPORTING_TYPES } from '../../lib/files.js';
 
-const MAX_FILE_BYTES = 8 * 1024 * 1024; // 8MB — generous for a text brief, tight enough to stay
-                                          // well under Claude's combined-request document limit
 const MAX_TITLE = 200;
 const MAX_SUBJECT = 200;
-const MAX_SUPPORTING_FILES = 5; // a sensible cap — more than this starts costing real tokens
-                                  // and getting hard for the plan to actually make use of
-const SUPPORTING_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function json(data, status) {
@@ -95,29 +91,18 @@ export async function onRequestPost({ request, env }) {
   const id = crypto.randomUUID();
   const now = Date.now();
 
-  async function storeFile(file, purpose) {
-    const fileId = crypto.randomUUID();
-    const fallbackExt = file.type === 'application/pdf' ? 'pdf' : (file.type.split('/')[1] || 'bin');
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || `${purpose}.${fallbackExt}`;
-    const key = `projects/${id}/${purpose}-${fileId}-${safeName}`;
-    await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-    return env.DB.prepare(
-      'INSERT INTO files (id, project_id, purpose, r2_key, filename, content_type, size, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(fileId, id, purpose, key, file.name, file.type, file.size, now);
-  }
-
   const stmts = [
     env.DB.prepare(
       'INSERT INTO projects (id, owner_email, title, subject, start_date, end_date, status, created_at, updated_at) ' +
       'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(id, owner, title, subject, startDate, endDate, 'draft', now, now),
-    await storeFile(brief, 'brief')
+    await storeFile(env, id, brief, 'brief')
   ];
   if (rubric && rubric instanceof File && rubric.size > 0) {
-    stmts.push(await storeFile(rubric, 'rubric'));
+    stmts.push(await storeFile(env, id, rubric, 'rubric'));
   }
   for (const f of supportingFiles) {
-    stmts.push(await storeFile(f, 'supporting'));
+    stmts.push(await storeFile(env, id, f, 'supporting'));
   }
 
   await env.DB.batch(stmts);

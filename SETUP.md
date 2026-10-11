@@ -128,17 +128,19 @@ to Claude alongside the brief on every later call (building the plan, generating
 checking a draft), framed as the student's own note rather than part of the brief itself, so the brief
 and rubric still win if the two ever disagree.
 
-Supporting documents: when creating a project, up to 5 extra files (PDFs or images — JPG, PNG, GIF or
-WEBP, 8MB each) can be attached alongside the brief, for anything else that gives Claude more context —
-lecture notes, a photo of a whiteboard or handwritten notes, earlier feedback. An image is sent to
-Claude as an image, not squeezed through a PDF. Like the additional-context text box, these are passed
-on every later call (building the plan, generating a milestone's steps, checking a draft), clearly
-labelled as the student's own extra material rather than the brief or rubric. Shown on the project
-settings page alongside the brief and rubric. Can only be added when the project is first created, not
-afterwards — a deliberate scoping choice, not an oversight.
+Supporting documents: up to 5 extra files per project (PDFs or images — JPG, PNG, GIF or WEBP, 8MB
+each) for anything else that gives Claude more context — lecture notes, a photo of a whiteboard or
+handwritten notes, earlier feedback. Can be attached when creating a project, and more can be added
+later from the project settings page (the cap is on the project's total either way). An image is sent
+to Claude as an image, not squeezed through a PDF. Like the additional-context text box, these are
+passed on every later call (building the plan, generating a milestone's steps, checking a draft),
+clearly labelled as the student's own extra material rather than the brief or rubric — and, same as
+that text box, a document added after the first read only reaches the plan itself (the deliverables,
+the tutor-check list, the milestones) if the student also reads the brief again, which is its own
+explicit step. Shown on the project settings page alongside the brief and rubric.
 
 Not yet built: an "I'm stuck" helper for when a student is partway through a step and needs a nudge;
-adding or removing supporting documents after a project has already been created.
+removing a supporting document once added.
 
 ## Local development
 
